@@ -106,6 +106,25 @@ export function fitImage(
   }
 }
 
+const MIN_BADGE_SIZE = 14
+
+/**
+ * Keep the badge inside its own screenshot. A crop can be as short as a button
+ * bar, and a badge hanging off the bottom would sit over the next item's text
+ * — which is exactly the pairing this whole layout exists to protect.
+ */
+function badgeFor(
+  size: { width: number; height: number },
+  theme: SheetTheme,
+  x: number,
+  y: number,
+): { x: number; y: number; size: number } {
+  const shortest = Math.min(size.width, size.height)
+  const badge = Math.max(MIN_BADGE_SIZE, Math.min(theme.badgeSize, shortest - 4))
+  const inset = Math.min(theme.badgeInset, Math.max(0, Math.floor((shortest - badge) / 2)))
+  return { x: x + inset, y: y + inset, size: badge }
+}
+
 export function layoutSheet(
   sources: SheetSource[],
   labels: SheetLabels,
@@ -146,11 +165,7 @@ export function layoutSheet(
     if (source.image) {
       const size = fitImage(source.image, contentWidth, theme.maxImageHeight)
       block.image = { x: theme.padding, y, width: size.width, height: size.height }
-      block.badge = {
-        x: theme.padding + theme.badgeInset,
-        y: y + theme.badgeInset,
-        size: theme.badgeSize,
-      }
+      block.badge = badgeFor(size, theme, theme.padding, y)
       y += size.height
     }
 

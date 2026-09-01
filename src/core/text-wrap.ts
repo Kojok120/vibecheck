@@ -9,7 +9,9 @@ const TOKENS = /\S+\s*|\s+/g
 function breakLongToken(token: string, maxWidth: number, measure: Measure): string[] {
   const lines: string[] = []
   let current = ''
-  for (const char of token) {
+  // Trailing spaces can push a token past the limit on their own, which would
+  // otherwise break the line and leave a blank one behind.
+  for (const char of token.trimEnd()) {
     if (current && measure(current + char) > maxWidth) {
       lines.push(current)
       current = char.trim() ? char : ''
@@ -35,7 +37,7 @@ export function wrapLines(text: string, maxWidth: number, measure: Measure): str
     let line = ''
     for (const token of paragraph.match(TOKENS) ?? []) {
       if (!line) {
-        if (measure(token) > maxWidth) {
+        if (measure(token.trimEnd()) > maxWidth) {
           const pieces = breakLongToken(token, maxWidth, measure)
           out.push(...pieces.slice(0, -1).map((p) => p.trimEnd()))
           line = pieces.at(-1) ?? ''
@@ -51,7 +53,7 @@ export function wrapLines(text: string, maxWidth: number, measure: Measure): str
       }
 
       out.push(line.trimEnd())
-      if (measure(token) > maxWidth) {
+      if (measure(token.trimEnd()) > maxWidth) {
         const pieces = breakLongToken(token, maxWidth, measure)
         out.push(...pieces.slice(0, -1).map((p) => p.trimEnd()))
         line = pieces.at(-1) ?? ''

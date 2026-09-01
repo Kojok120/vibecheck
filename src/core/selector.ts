@@ -1,3 +1,5 @@
+import { truncate } from './naming'
+
 /**
  * Turn the element under a selection into a CSS selector an agent can grep for.
  * Prefers stable hooks (id, test ids) and only falls back to structural paths.
@@ -5,8 +7,15 @@
 
 const TEST_ID_ATTRIBUTES = ['data-testid', 'data-test-id', 'data-test', 'data-qa', 'data-cy']
 const MAX_DEPTH = 6
-/** Framework-generated class names are noise, not a hook. */
-const GENERATED_CLASS = /^(?:[a-z]+[-_]?)?[A-Za-z0-9]*(?:__|--)?[a-z0-9]{5,}$|^(?:css|sc|jsx)-/
+/**
+ * Framework-generated class names are noise, not a hook. What marks one is a
+ * digit-bearing hash segment (`Button_root__1a2b3`, `_1q2w3e`) or a css-in-js
+ * prefix — not length, which would throw away `toolbar` and `header` too.
+ * Utility classes like `px-4` fall out here as well, which is right: they
+ * describe styling, not identity.
+ */
+const GENERATED_CLASS =
+  /^(?:css|sc|jsx|emotion|styled)-|(?:^|[-_])[A-Za-z0-9]*\d[A-Za-z0-9]*$/
 
 function escapeIdent(value: string): string {
   if (typeof CSS !== 'undefined' && typeof CSS.escape === 'function') return CSS.escape(value)
@@ -109,6 +118,5 @@ export function buildSelector(el: Element | null): string {
 /** A short excerpt of the element's own text, for context in the report. */
 export function elementText(el: Element | null, maxLength = 120): string | undefined {
   const text = el?.textContent?.replace(/\s+/g, ' ').trim()
-  if (!text) return undefined
-  return text.length > maxLength ? `${text.slice(0, maxLength - 1)}…` : text
+  return text ? truncate(text, maxLength) : undefined
 }

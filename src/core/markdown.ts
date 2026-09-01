@@ -21,21 +21,31 @@ export interface MarkdownOptions {
   footer?: boolean
 }
 
+/**
+ * Wrap a link destination that Markdown would otherwise mis-parse. Absolute
+ * paths routinely contain spaces (`/Users/First Last/Downloads/…`), which ends
+ * the destination early and breaks the image.
+ */
+function linkDestination(target: string): string {
+  if (!/[\s()]/.test(target)) return target
+  return `<${target.replace(/([<>])/g, '\\$1')}>`
+}
+
 function imageMarkdown(item: FeedbackItem, seq: number, mode: ImageMode): string | null {
   switch (mode.kind) {
     case 'none':
       return null
     case 'path': {
       const path = mode.paths[item.id]
-      return path ? `![#${seq}](${path})` : null
+      return path ? `![#${seq}](${linkDestination(path)})` : null
     }
     case 'inline': {
       const url = mode.urls[item.id]
-      return url ? `![#${seq}](${url})` : null
+      return url ? `![#${seq}](${linkDestination(url)})` : null
     }
     case 'link': {
       const url = mode.urls[item.id]
-      return url ? `[#${seq} screenshot](${url})` : null
+      return url ? `[#${seq} screenshot](${linkDestination(url)})` : null
     }
   }
 }
@@ -104,6 +114,14 @@ export function renderPlainText(items: NumberedItem[], locale: Locale): string {
 }
 
 /**
+ * Slack reserves `&`, `<` and `>` for its own markup, so feedback like
+ * "`<Button>` の余白を詰める" would otherwise vanish into a broken link.
+ */
+export function escapeSlack(text: string): string {
+  return text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+}
+
+/**
  * Slack renders mrkdwn, not Markdown: `**bold**` and `###` headings come out
  * as literal characters, so the same content needs its own dialect.
  */
@@ -113,11 +131,14 @@ export function renderSlackText(items: NumberedItem[], locale: Locale): string {
 
   return items
     .map(({ item, seq }) => {
-      const lines = [`*#${seq}  ${itemLabel(item)}*`]
-      if (item.background.trim()) lines.push(`*${t.background}*`, item.background.trim())
-      if (item.request.trim()) lines.push(`*${t.request}*`, item.request.trim())
-      lines.push(`<${item.page.url}|${item.page.url}>`)
-      if (item.target) lines.push(`\`${item.target.selector}\``)
+      const e = escapeSlack
+      const lines = [`*#${seq}  ${e(itemLabel(item))}*`]
+      if (item.background.trim()) lines.push(`*${t.background}*`, e(item.background.trim()))
+      if (item.request.trim()) lines.push(`*${t.request}*`, e(item.request.trim()))
+      // No `|label` part: the label would be the URL anyway, and a `|` inside
+      // the URL would be read as the separator.
+      lines.push(`<${e(item.page.url)}>`)
+      if (item.target) lines.push(`\`${e(item.target.selector)}\``)
       return lines.join('\n')
     })
     .join('\n\n')

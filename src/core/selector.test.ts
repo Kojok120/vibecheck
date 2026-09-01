@@ -65,9 +65,28 @@ describe('buildSelector', () => {
     expect(buildSelector(find('.lead'))).toBe('#card > p.lead')
   })
 
-  it('ignores hashed framework class names', () => {
-    mount('<div id="w"><span class="css-1a2b3c4">a</span><span>b</span></div>')
-    expect(buildSelector(find('.css-1a2b3c4'))).not.toContain('css-1a2b3c4')
+  it.each([['css-1a2b3c4'], ['sc-bdVaJa'], ['Button_root__1a2b3'], ['px-4']])(
+    'ignores the generated class name %s',
+    (generated) => {
+      mount(`<div id="w"><span class="${generated}">a</span><span>b</span></div>`)
+      expect(buildSelector(find(`[class="${generated}"]`))).not.toContain(generated)
+    },
+  )
+
+  it.each([['toolbar'], ['header'], ['amount'], ['submit-button']])(
+    'keeps the meaningful class name %s',
+    (meaningful) => {
+      mount(`<div id="w"><span class="${meaningful}">a</span><span>b</span></div>`)
+      expect(buildSelector(find(`.${meaningful}`))).toBe(`#w > span.${meaningful}`)
+    },
+  )
+
+  it('ignores an id that is not unique', () => {
+    mount('<div id="dup"><span>a</span></div><div id="dup"><b>b</b></div>')
+    const target = find('b')
+    const selector = buildSelector(target)
+    expect(selector).not.toContain('#dup')
+    expect(document.querySelector(selector)).toBe(target)
   })
 
   it('always resolves back to the element it described', () => {

@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
   compactUrl,
   formatStamp,
+  truncate,
   hostOf,
   itemLabel,
   screenshotFileName,
@@ -114,5 +115,43 @@ describe('compactUrl', () => {
 
   it('degrades gracefully for unparseable input', () => {
     expect(compactUrl('about:blank')).toBe('about:blank')
+  })
+})
+
+describe('truncate', () => {
+  it('never splits an emoji into a lone surrogate', () => {
+    const out = truncate('絵文字テスト🎉のあと', 7)
+    expect(out.isWellFormed()).toBe(true)
+    expect([...out]).toHaveLength(7)
+  })
+
+  it('counts characters, not UTF-16 code units', () => {
+    expect([...truncate('🎉🎉🎉🎉🎉', 3)]).toHaveLength(3)
+  })
+
+  it('leaves short text alone', () => {
+    expect(truncate('short', 40)).toBe('short')
+  })
+})
+
+describe('slugify with other scripts', () => {
+  it('keeps characters outside the basic CJK block', () => {
+    expect(slugify('𠮟るボタン')).toBe('𠮟るボタン')
+  })
+
+  it('drops emoji rather than leaving them in a filename', () => {
+    expect(slugify('fix 🎉 the header')).toBe('fix-the-header')
+  })
+})
+
+describe('hostOf and compactUrl edge cases', () => {
+  it('falls back when the scheme carries no host', () => {
+    expect(hostOf('file:///Users/me/index.html')).toBe('page')
+  })
+
+  it('keeps the hash so a hash-routed SPA is still identifiable', () => {
+    expect(compactUrl('https://app.example.com/#/settings/billing')).toBe(
+      'app.example.com#/settings/billing',
+    )
   })
 })

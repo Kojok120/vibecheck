@@ -1,14 +1,15 @@
 /** Slug/filename helpers. Kept pure so filenames stay predictable and testable. */
 
-// Latin letters, digits, and CJK are all safe (and readable) in filenames on
-// macOS/Linux/Windows. Everything else collapses into a single hyphen.
-const KEEP = /[^0-9a-z々぀-ヿ㐀-䶿一-鿿ｦ-ﾟ]+/gi
+// Letters and digits of any script are safe (and readable) in filenames on
+// macOS/Linux/Windows. Everything else — punctuation, emoji, whitespace —
+// collapses into a single hyphen.
+const DROP = /[^\p{L}\p{N}]+/gu
 
 export function slugify(text: string, maxLength = 40): string {
   const slug = text
     .normalize('NFKC')
     .toLowerCase()
-    .replace(KEEP, '-')
+    .replace(DROP, '-')
     .replace(/-{2,}/g, '-')
     .replace(/^-|-$/g, '')
   return slug.length > maxLength ? slug.slice(0, maxLength).replace(/-$/, '') : slug
@@ -28,7 +29,8 @@ export function formatStamp(date: Date): string {
 
 export function hostOf(url: string): string {
   try {
-    return new URL(url).host
+    // `file:` and other schemes parse fine but carry no host.
+    return new URL(url).host || 'page'
   } catch {
     return 'page'
   }
@@ -37,8 +39,14 @@ export function hostOf(url: string): string {
 /** Shorten free text to a single line suitable for a title or heading. */
 export function summarise(text: string, maxLength = 60): string {
   const line = text.replace(/\s+/g, ' ').trim()
-  if (line.length <= maxLength) return line
-  return `${line.slice(0, maxLength - 1).trimEnd()}…`
+  return truncate(line, maxLength)
+}
+
+/** Cut to `maxLength` characters without splitting an emoji down the middle. */
+export function truncate(text: string, maxLength: number): string {
+  const characters = [...text]
+  if (characters.length <= maxLength) return text
+  return `${characters.slice(0, maxLength - 1).join('').trimEnd()}…`
 }
 
 /**
@@ -77,5 +85,7 @@ export function compactUrl(url: string, maxLength = 64): string {
   }
   if (!parsed.host) return summarise(url, maxLength)
   const path = parsed.pathname === '/' ? '' : parsed.pathname.replace(/\/$/, '')
-  return summarise(`${parsed.host}${path}${parsed.search}`, maxLength)
+  // The hash carries the route on a hash-routed SPA, so dropping it would
+  // leave every screenshot labelled with the bare host.
+  return summarise(`${parsed.host}${path}${parsed.search}${parsed.hash}`, maxLength)
 }

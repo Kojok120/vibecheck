@@ -124,3 +124,31 @@ describe('layoutSheet', () => {
     expect(layout.height).toBe(DEFAULT_THEME.padding * 2)
   })
 })
+
+describe('badge containment', () => {
+  it('keeps the badge inside a short screenshot', () => {
+    const { blocks } = layoutSheet(
+      [source({ image: { width: 600, height: 34 } })],
+      labels,
+      wrap,
+    )
+    const { image, badge } = blocks[0]!
+    expect(badge!.y).toBeGreaterThanOrEqual(image!.y)
+    expect(badge!.y + badge!.size).toBeLessThanOrEqual(image!.y + image!.height)
+    expect(badge!.x + badge!.size).toBeLessThanOrEqual(image!.x + image!.width)
+  })
+
+  it('keeps the badge large enough to read', () => {
+    const { blocks } = layoutSheet(
+      [source({ image: { width: 600, height: 40 } })],
+      labels,
+      wrap,
+    )
+    expect(blocks[0]!.badge!.size).toBeGreaterThanOrEqual(14)
+  })
+
+  it('still uses the full badge on a normal screenshot', () => {
+    const { blocks } = layoutSheet([source()], labels, wrap)
+    expect(blocks[0]!.badge!.size).toBe(DEFAULT_THEME.badgeSize)
+  })
+})

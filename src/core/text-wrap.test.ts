@@ -46,3 +46,15 @@ describe('wrapLines', () => {
     expect(wrapLines('anything', 0, measure)).toEqual(['anything'])
   })
 })
+
+describe('whitespace and emoji', () => {
+  it('does not emit a blank line for trailing spaces', () => {
+    expect(wrapLines('fix   this        ', 6, measure)).toEqual(['fix', 'this'])
+  })
+
+  it('wraps emoji as whole characters', () => {
+    const lines = wrapLines('確認🎉ボタンの色を直す', 8, measure)
+    expect(lines.join('')).toBe('確認🎉ボタンの色を直す')
+    for (const line of lines) expect(line.isWellFormed()).toBe(true)
+  })
+})

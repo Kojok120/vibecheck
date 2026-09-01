@@ -96,8 +96,26 @@ describe('renderSlackText', () => {
 
   it('wraps the URL in Slack link syntax', () => {
     expect(renderSlackText(numbered([makeItem()]), 'en')).toContain(
-      '<https://app.example.com/dashboard|https://app.example.com/dashboard>',
+      '<https://app.example.com/dashboard>',
     )
+  })
+
+  it('escapes the characters Slack reserves for its own markup', () => {
+    const out = renderSlackText(
+      numbered([makeItem({ request: '<Button> の余白を A&B くらいに詰める' })]),
+      'ja',
+    )
+    expect(out).toContain('&lt;Button&gt; の余白を A&amp;B くらいに詰める')
+    expect(out).not.toContain('<Button>')
+  })
+
+  it('leaves no bare ampersand in a query string to swallow the link', () => {
+    const item = makeItem()
+    const out = renderSlackText(
+      numbered([{ ...item, page: { ...item.page, url: 'https://a.com/x?p=1&q=2' } }]),
+      'en',
+    )
+    expect(out).toContain('<https://a.com/x?p=1&amp;q=2>')
   })
 
   it('numbers items to match the contact sheet badges', () => {
@@ -139,5 +157,31 @@ describe('explicit numbering', () => {
     const batch = [{ item: makeItem({ id: 'a' }), seq: 5 }]
     expect(renderSlackText(batch, 'en')).toContain('*#5  ')
     expect(renderPlainText(batch, 'en')).toContain('#5 ')
+  })
+})
+
+describe('link destinations', () => {
+  it('wraps a path containing spaces so Markdown does not cut it short', () => {
+    const out = renderMarkdown([{ item: makeItem({ id: 'a' }), seq: 1 }], {
+      ...base,
+      images: { kind: 'path', paths: { a: '/Users/First Last/Downloads/01 shot.png' } },
+    })
+    expect(out).toContain('![#1](</Users/First Last/Downloads/01 shot.png>)')
+  })
+
+  it('wraps a path containing parentheses', () => {
+    const out = renderMarkdown([{ item: makeItem({ id: 'a' }), seq: 1 }], {
+      ...base,
+      images: { kind: 'path', paths: { a: '/tmp/shot (1).png' } },
+    })
+    expect(out).toContain('![#1](</tmp/shot (1).png>)')
+  })
+
+  it('leaves an ordinary URL alone', () => {
+    const out = renderMarkdown([{ item: makeItem({ id: 'a' }), seq: 1 }], {
+      ...base,
+      images: { kind: 'inline', urls: { a: 'https://raw.example.com/a.png' } },
+    })
+    expect(out).toContain('![#1](https://raw.example.com/a.png)')
   })
 })
