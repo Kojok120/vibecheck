@@ -73,8 +73,6 @@ Check `chrome://extensions/shortcuts` afterwards. On macOS `Cmd+J` is Chrome's o
 
 Copy and Save need no configuration. The three destinations below each need one credential.
 
-<a id="setup"></a>
-
 ### GitHub
 
 1. Create an OAuth app at **Settings → Developer settings → OAuth Apps → New OAuth App**. Any homepage and callback URL will do.
