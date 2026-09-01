@@ -8,6 +8,8 @@ export default defineConfig({
   outDir: '.output',
   manifest: {
     name: 'VibeCheck',
+    // `sidePanel.open()` landed in Chrome 116.
+    minimum_chrome_version: '116',
     short_name: 'VibeCheck',
     description:
       'Capture UI feedback while you review, then ship it to GitHub Issues, Slack, or Discord.',
@@ -26,10 +28,12 @@ export default defineConfig({
     ],
     host_permissions: [
       'https://api.github.com/*',
-      'https://github.com/*',
+      // Device flow only; nothing else on github.com is fetched.
+      'https://github.com/login/*',
       'https://slack.com/api/*',
       'https://files.slack.com/*',
       'https://discord.com/api/webhooks/*',
+      'https://discordapp.com/api/webhooks/*',
     ],
     commands: {
       'toggle-vibecheck': {

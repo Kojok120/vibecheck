@@ -6,6 +6,9 @@
   "description": "Capture UI feedback while you review, then ship it to GitHub Issues, Slack, or Discord.",
   "license": "MIT",
   "packageManager": "pnpm@10.11.0",
+  "engines": {
+    "node": ">=22"
+  },
   "scripts": {
     "dev": "wxt",
     "build": "wxt build",

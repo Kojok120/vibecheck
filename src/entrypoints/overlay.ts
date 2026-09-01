@@ -1,16 +1,13 @@
-import { browser } from 'wxt/browser'
 import { defineUnlistedScript } from 'wxt/utils/define-unlisted-script'
 import type { Widen } from '@/core/dict'
-import { resolveLocale } from '@/core/i18n'
 import { centreOf, isUsableSelection, rectFromDrag } from '@/core/geometry'
 import { buildSelector, elementText } from '@/core/selector'
 import { errorMessage, request } from '@/services/messages'
-import { loadSettings } from '@/services/settings'
-import { loadState } from '@/services/store'
 import type { Locale, NewItem, PageInfo, Rect, TargetInfo } from '@/types'
 
 const HOST_ID = 'vibecheck-overlay-root'
-const TOGGLE_EVENT = 'vibecheck:toggle'
+/** Read-only, content-free, and only so a test can see the state. */
+const MODE_ATTRIBUTE = 'data-vibecheck-mode'
 
 type Mode = 'idle' | 'selecting' | 'composing'
 
@@ -129,12 +126,16 @@ class Overlay {
   private dragStart: { x: number; y: number } | null = null
   private pending: Pending | null = null
   private itemCount = 0
+  private draft: { background: string; request: string } | null = null
   private toastTimer: number | undefined
 
   constructor() {
     this.host = document.createElement('div')
     this.host.id = HOST_ID
-    this.root = this.host.attachShadow({ mode: 'open' })
+    // Closed, so the page cannot read what the reviewer is typing or reach in
+    // and rewrite it. The feedback ends up in an issue a coding agent acts on,
+    // which makes a page-writable form an injection route.
+    this.root = this.host.attachShadow({ mode: 'closed' })
 
     const style = document.createElement('style')
     style.textContent = CSS
@@ -143,19 +144,24 @@ class Overlay {
     this.root.append(style, this.layer)
     document.documentElement.appendChild(this.host)
 
-    void this.resolveLocale()
+    void this.syncContext()
     window.addEventListener('keydown', this.onKeyDown, true)
-    window.addEventListener(TOGGLE_EVENT, this.toggle)
   }
 
   private get t() {
     return UI[this.locale]
   }
 
-  private async resolveLocale(): Promise<void> {
+  /**
+   * Ask the worker for the little it needs. Reading settings directly would
+   * pull GitHub and Slack tokens into the page's renderer process for the sake
+   * of a language tag and a count.
+   */
+  private async syncContext(): Promise<void> {
     try {
-      const settings = await loadSettings()
-      this.locale = resolveLocale(settings.locale, browser.i18n.getUILanguage())
+      const context = await request({ type: 'overlay-context' })
+      this.locale = context.locale
+      this.itemCount = context.openCount
     } catch {
       this.locale = navigator.language.startsWith('ja') ? 'ja' : 'en'
     }
@@ -174,18 +180,7 @@ class Overlay {
     // Give the shortcut keys a clean slate: a focused editor would swallow S/C.
     if (focused && isEditable(focused)) focused.blur()
     this.render()
-    void this.syncCount()
-  }
-
-  /** Show how many items are still outstanding in the current session. */
-  private async syncCount(): Promise<void> {
-    try {
-      const { sessions, activeSessionId } = await loadState()
-      const active = sessions.find((s) => s.id === activeSessionId)
-      this.setItemCount(active?.items.filter((item) => !item.done).length ?? 0)
-    } catch {
-      /* the count is a nicety, never a blocker */
-    }
+    void this.syncContext()
   }
 
   deactivate(): void {
@@ -197,12 +192,12 @@ class Overlay {
 
   destroy(): void {
     window.removeEventListener('keydown', this.onKeyDown, true)
-    window.removeEventListener(TOGGLE_EVENT, this.toggle)
     this.host.remove()
   }
 
   private onKeyDown = (event: KeyboardEvent): void => {
-    if (!this.active) return
+    // Synthetic events come from the page, not the reviewer.
+    if (!this.active || !event.isTrusted) return
 
     if (event.key === 'Escape') {
       event.preventDefault()
@@ -217,6 +212,9 @@ class Overlay {
     const key = event.key.toLowerCase()
     if (key !== 's' && key !== 'c') return
     if (event.metaKey || event.ctrlKey || event.altKey) return
+    // The reviewer is expected to keep using the page while the HUD is up, so
+    // typing "s" into the app's own search box must not start a selection.
+    if (event.target instanceof HTMLElement && isEditable(event.target)) return
 
     event.preventDefault()
     event.stopPropagation()
@@ -233,7 +231,7 @@ class Overlay {
   // ---- selection -------------------------------------------------------
 
   private onPointerDown = (event: PointerEvent): void => {
-    if (this.mode !== 'selecting' || event.button !== 0) return
+    if (this.mode !== 'selecting' || event.button !== 0 || !event.isTrusted) return
     event.preventDefault()
     this.dragStart = { x: event.clientX, y: event.clientY }
     this.layer.setPointerCapture(event.pointerId)
@@ -241,12 +239,12 @@ class Overlay {
   }
 
   private onPointerMove = (event: PointerEvent): void => {
-    if (!this.dragStart) return
+    if (!this.dragStart || !event.isTrusted) return
     this.renderMarquee(rectFromDrag(this.dragStart, { x: event.clientX, y: event.clientY }))
   }
 
   private onPointerUp = (event: PointerEvent): void => {
-    if (!this.dragStart) return
+    if (!this.dragStart || !event.isTrusted) return
     const rect = rectFromDrag(this.dragStart, { x: event.clientX, y: event.clientY })
     this.dragStart = null
     if (!isUsableSelection(rect)) {
@@ -306,7 +304,7 @@ class Overlay {
 
   private discardPending(): void {
     const shotKey = this.pending?.shot?.shotKey
-    if (shotKey) void request({ type: 'discard-shot', shotKey })
+    if (shotKey) void request({ type: 'discard-shot', shotKey }).catch(() => undefined)
     this.pending = null
   }
 
@@ -314,6 +312,7 @@ class Overlay {
     const pending = this.pending
     if (!pending) return
     if (!background.trim() && !requestText.trim()) return
+    const draft = { background, request: requestText }
 
     const item: NewItem = {
       kind: pending.shot ? 'shot' : 'comment',
@@ -339,6 +338,11 @@ class Overlay {
       this.render()
       this.toast(this.t.added(seq))
     } catch (error) {
+      // Losing what the reviewer just wrote is worse than the failure itself.
+      this.pending = pending
+      this.mode = 'composing'
+      this.draft = draft
+      this.render()
       this.toast(errorMessage(error), true)
     }
   }
@@ -346,6 +350,7 @@ class Overlay {
   // ---- rendering -------------------------------------------------------
 
   private render(): void {
+    this.host.setAttribute(MODE_ATTRIBUTE, this.active ? this.mode : 'off')
     this.layer.replaceChildren()
     this.layer.classList.toggle('grabbing', this.mode === 'selecting')
     this.layer.onpointerdown = this.mode === 'selecting' ? this.onPointerDown : null
@@ -401,8 +406,9 @@ class Overlay {
     const card = document.createElement('div')
     card.className = 'card'
 
-    const background = field(this.t.background, this.t.backgroundPlaceholder)
-    const changes = field(this.t.request, this.t.requestPlaceholder)
+    const background = field(this.t.background, this.t.backgroundPlaceholder, this.draft?.background)
+    const changes = field(this.t.request, this.t.requestPlaceholder, this.draft?.request)
+    this.draft = null
     card.append(background.wrapper, changes.wrapper)
 
     const row = document.createElement('div')
@@ -451,21 +457,18 @@ class Overlay {
     this.layer.querySelector('[data-role="toast"]')?.remove()
   }
 
-  private setItemCount(count: number): void {
-    this.itemCount = count
-    if (this.active && this.mode === 'idle') this.render()
-  }
 }
 
 // ---- helpers -----------------------------------------------------------
 
-function field(label: string, placeholder: string) {
+function field(label: string, placeholder: string, value = '') {
   const wrapper = document.createElement('div')
   wrapper.className = 'field'
   const el = document.createElement('label')
   el.textContent = label
   const input = document.createElement('textarea')
   input.placeholder = placeholder
+  input.value = value
   input.rows = 2
   wrapper.append(el, input)
   return { wrapper, input }
@@ -562,8 +565,11 @@ declare global {
 
 export default defineUnlistedScript(() => {
   // Re-running the file (a second Cmd+J) must toggle, not stack a second UI.
-  if (window.__vibecheckOverlay) {
-    window.dispatchEvent(new CustomEvent(TOGGLE_EVENT))
+  // The handle lives on the isolated world's `window`, which the page cannot
+  // reach — so toggling is not something a page can trigger.
+  const existing = window.__vibecheckOverlay
+  if (existing) {
+    existing.toggle()
     return
   }
   const overlay = new Overlay()

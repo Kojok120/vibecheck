@@ -52,7 +52,7 @@ Once you send a batch anywhere — copy, save, issue, Slack, Discord — those
 items are checked off and fold into a **Done** section, so the list keeps
 showing only what is still outstanding. The numbers you see in the panel are
 the numbers that end up in the badge and in the text, and reopening an item
-puts it back at the top of the queue.
+puts it back where it was.
 
 ### About "copy several screenshots at once"
 
@@ -115,7 +115,7 @@ VibeCheck asks for as little as it can, and the reason for each is worth knowing
 | `storage`, `unlimitedStorage` | Feedback lives in `chrome.storage.local`; screenshots live in the extension's own IndexedDB. |
 | `downloads` | The Save action. |
 | `sidePanel`, `clipboardWrite` | The panel, and the numbered-image copy. |
-| Host access to `api.github.com`, `github.com`, `slack.com`, `discord.com` | Only the four services above, only when you send something. |
+| Host access to `api.github.com`, `github.com/login`, `slack.com`, `files.slack.com`, `discord.com` | Only the four services above, only when you send something. |
 
 Nothing is uploaded anywhere until you press a send button. Tokens are stored in `chrome.storage.local` on your machine and can be revoked from the options page.
 

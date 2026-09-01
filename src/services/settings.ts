@@ -42,11 +42,24 @@ export async function loadSettings(): Promise<Settings> {
   return merge(raw[KEY])
 }
 
-export async function saveSettings(patch: Partial<Settings>): Promise<Settings> {
+/**
+ * Apply a change against whatever is stored *now*.
+ *
+ * The GitHub device flow can sit waiting for minutes; saving a patch built
+ * from the settings a component captured at click time would quietly undo
+ * anything edited in the meantime.
+ */
+export async function updateSettings(
+  apply: (current: Settings) => Partial<Settings>,
+): Promise<Settings> {
   const current = await loadSettings()
-  const next = merge({ ...current, ...patch })
+  const next = merge({ ...current, ...apply(current) })
   await browser.storage.local.set({ [KEY]: next })
   return next
+}
+
+export function saveSettings(patch: Partial<Settings>): Promise<Settings> {
+  return updateSettings(() => patch)
 }
 
 export function watchSettings(onChange: (settings: Settings) => void): () => void {

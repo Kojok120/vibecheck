@@ -37,7 +37,7 @@ export function ItemRow({
           checked={item.checked}
           onChange={onToggle}
           className="size-3.5 flex-none accent-brand-600"
-          aria-label={`#${seq}`}
+          aria-label={`#${seq} ${itemLabel(item, 40)}`}
         />
         <Badge n={seq} />
         <a
@@ -45,7 +45,7 @@ export function ItemRow({
           target="_blank"
           rel="noreferrer"
           title={item.page.url}
-          className="min-w-0 flex-1 truncate text-[11.5px] text-ink-500 hover:text-brand-600 hover:underline dark:text-ink-400"
+          className="min-w-0 flex-1 truncate text-[11.5px] text-ink-500 hover:text-brand-700 hover:underline dark:text-brand-400 dark:text-ink-400"
         >
           {compactUrl(item.page.url, 80)}
         </a>
@@ -63,10 +63,16 @@ export function ItemRow({
       </div>
 
       {shot && (
-        <a href={shot} target="_blank" rel="noreferrer" className="mt-2 block">
+        <a
+          href={shot}
+          target="_blank"
+          rel="noreferrer"
+          aria-label={`#${seq} ${t.screenshot}`}
+          className="mt-2 block"
+        >
           <img
             src={shot}
-            alt=""
+            alt={`#${seq} ${t.screenshot}`}
             className="max-h-44 w-full rounded-lg border border-ink-200 bg-ink-100 object-contain object-left-top dark:border-ink-800 dark:bg-ink-950"
           />
         </a>
@@ -88,7 +94,7 @@ export function ItemRow({
       </div>
 
       {item.target && (
-        <p className="mt-1.5 truncate font-mono text-[10.5px] text-ink-400 dark:text-ink-600">
+        <p className="mt-1.5 truncate font-mono text-[10.5px] text-ink-500 dark:text-ink-400">
           {item.target.selector}
         </p>
       )}
@@ -157,7 +163,7 @@ export function DoneRow({
           href={ref}
           target="_blank"
           rel="noreferrer"
-          className="flex-none truncate text-[11px] font-semibold text-brand-600 hover:underline"
+          className="flex-none truncate text-[11px] font-semibold text-brand-700 hover:underline dark:text-brand-400"
         >
           {ref.replace('https://github.com/', '')}
         </a>

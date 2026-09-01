@@ -1,8 +1,14 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { browser } from 'wxt/browser'
 import { copyText } from '@/services/clipboard'
 import * as github from '@/services/github'
-import { DEFAULT_GITHUB_CLIENT_ID, isClientIdMissing, saveSettings } from '@/services/settings'
+import {
+  DEFAULT_ASSET_BRANCH,
+  DEFAULT_GITHUB_CLIENT_ID,
+  isClientIdMissing,
+  saveSettings,
+  updateSettings,
+} from '@/services/settings'
 import * as slack from '@/services/slack'
 import { isWebhookUrl } from '@/services/discord'
 import { Button, Spinner } from '@/ui/components'
@@ -80,10 +86,11 @@ export function Options() {
           className="text-rose-600 dark:text-rose-400"
           onClick={() => {
             if (!confirm(t.clearConfirm)) return
-            void browser.storage.local.clear().then(() => {
-              void indexedDB.deleteDatabase('vibecheck')
-              report(t.saved)
-            })
+            void clearEverything(t.clearBlocked).then(
+              () => report(t.cleared),
+              (error: unknown) =>
+                report(error instanceof Error ? error.message : String(error), 'error'),
+            )
           }}
         >
           {t.clearAll}
@@ -95,12 +102,25 @@ export function Options() {
           href={SETUP_DOCS}
           target="_blank"
           rel="noreferrer"
-          className="text-brand-600 hover:underline"
+          className="text-brand-700 hover:underline dark:text-brand-400"
         >
           {t.setupGuide}
         </a>
       </p>
     </main>
+  )
+}
+
+/** An open side panel holds the IndexedDB connection, which blocks the delete. */
+function clearEverything(blockedMessage: string): Promise<void> {
+  return browser.storage.local.clear().then(
+    () =>
+      new Promise<void>((resolve, reject) => {
+        const request = indexedDB.deleteDatabase('vibecheck')
+        request.onsuccess = () => resolve()
+        request.onerror = () => reject(request.error ?? new Error('Could not delete the database'))
+        request.onblocked = () => reject(new Error(blockedMessage))
+      }),
   )
 }
 
@@ -119,6 +139,7 @@ function GithubSection({
 }) {
   const [device, setDevice] = useState<github.DeviceCode | null>(null)
   const [pending, setPending] = useState(false)
+  const abort = useRef<AbortController | null>(null)
 
   const connect = async () => {
     const clientId = settings.github.clientId || DEFAULT_GITHUB_CLIENT_ID
@@ -127,17 +148,25 @@ function GithubSection({
       return
     }
     setPending(true)
+    const controller = new AbortController()
+    abort.current = controller
     try {
       const code = await github.startDeviceFlow(clientId)
       setDevice(code)
-      await browser.tabs.create({ url: code.verificationUri })
-      const token = await github.pollDeviceFlow(clientId, code)
+      // Opened in the background: the reviewer needs to read the code first.
+      await browser.tabs.create({ url: code.verificationUri, active: false })
+      const token = await github.pollDeviceFlow(clientId, code, { signal: controller.signal })
       const user = await github.getUser(token)
-      await saveSettings({ github: { ...settings.github, token, login: user.login } })
+      // Approval can take minutes; merge onto whatever is stored now so any
+      // edits made while waiting survive.
+      await updateSettings((current) => ({
+        github: { ...current.github, token, login: user.login },
+      }))
       onReport(t.connectedAs(user.login))
     } catch (error) {
       onReport(error instanceof Error ? error.message : String(error), 'error')
     } finally {
+      abort.current = null
       setDevice(null)
       setPending(false)
     }
@@ -186,6 +215,9 @@ function GithubSection({
             <Button onClick={() => void browser.tabs.create({ url: device.verificationUri })}>
               {t.openGithub}
             </Button>
+            <Button variant="ghost" onClick={() => abort.current?.abort()}>
+              {t.cancel}
+            </Button>
           </div>
           <p className="mt-2 flex items-center gap-2 text-[12px] text-ink-500 dark:text-ink-400">
             <Spinner /> {t.waiting}
@@ -194,41 +226,31 @@ function GithubSection({
       )}
 
       <Labelled label={t.assetBranch} hint={t.assetBranchHint}>
-        <input
-          className={inputClass}
-          defaultValue={settings.github.assetBranch}
-          onBlur={(event) =>
-            void saveSettings({
-              github: { ...settings.github, assetBranch: event.target.value.trim() },
-            })
+        <TextSetting
+          value={settings.github.assetBranch}
+          onCommit={(assetBranch) =>
+            void updateSettings((current) => ({
+              github: { ...current.github, assetBranch: assetBranch || DEFAULT_ASSET_BRANCH },
+            }))
           }
         />
       </Labelled>
 
       <Labelled label={t.defaultRepo}>
-        <input
-          className={inputClass}
+        <TextSetting
+          value={settings.github.defaultRepo ?? ''}
           placeholder="owner/repo"
-          defaultValue={settings.github.defaultRepo ?? ''}
-          onBlur={(event) =>
-            void saveSettings({
-              github: { ...settings.github, defaultRepo: event.target.value.trim() },
-            })
+          onCommit={(defaultRepo) =>
+            void updateSettings((current) => ({ github: { ...current.github, defaultRepo } }))
           }
         />
       </Labelled>
 
       <Labelled label={t.clientId} hint={t.clientIdHint}>
-        <input
-          className={inputClass}
-          defaultValue={settings.github.clientId}
-          onBlur={(event) =>
-            void saveSettings({
-              github: {
-                ...settings.github,
-                clientId: event.target.value.trim() || DEFAULT_GITHUB_CLIENT_ID,
-              },
-            })
+        <TextSetting
+          value={settings.github.clientId}
+          onCommit={(clientId) =>
+            void updateSettings((current) => ({ github: { ...current.github, clientId } }))
           }
         />
       </Labelled>
@@ -254,7 +276,9 @@ function SlackSection({
     setPending(true)
     try {
       const identity = await slack.verifyToken(token.trim())
-      await saveSettings({ slack: { ...settings.slack, token: token.trim(), teamName: identity.team } })
+      await updateSettings((current) => ({
+        slack: { ...current.slack, token: token.trim(), teamName: identity.team },
+      }))
       onReport(t.slackConnected(identity.team, identity.user))
     } catch (error) {
       onReport(error instanceof Error ? error.message : String(error), 'error')
@@ -264,7 +288,17 @@ function SlackSection({
   }
 
   return (
-    <Section title={t.slack} description={t.slackBody}>
+    <Section
+      title={t.slack}
+      description={t.slackBody}
+      aside={
+        settings.slack.token ? (
+          <Button onClick={() => void updateSettings(() => ({ slack: {} }))}>
+            {t.disconnect}
+          </Button>
+        ) : null
+      }
+    >
       <Labelled label={t.slackToken} hint={t.slackTokenHint}>
         <input
           className={inputClass}
@@ -296,16 +330,16 @@ function DiscordSection({
 
   const add = () => {
     if (!isWebhookUrl(url)) {
-      onReport(t.webhookUrl, 'error')
+      onReport(t.badWebhookUrl, 'error')
       return
     }
     const webhook = { id: newId('hook'), name: name.trim() || 'Discord', url: url.trim() }
-    void saveSettings({
+    void updateSettings((current) => ({
       discord: {
-        webhooks: [...settings.discord.webhooks, webhook],
-        defaultId: settings.discord.defaultId ?? webhook.id,
+        webhooks: [...current.discord.webhooks, webhook],
+        defaultId: current.discord.defaultId ?? webhook.id,
       },
-    })
+    }))
     setName('')
     setUrl('')
     onReport(t.saved)
@@ -322,11 +356,15 @@ function DiscordSection({
               <Button
                 variant="ghost"
                 onClick={() =>
-                  void saveSettings({
-                    discord: {
-                      ...settings.discord,
-                      webhooks: settings.discord.webhooks.filter((w) => w.id !== webhook.id),
-                    },
+                  void updateSettings((current) => {
+                    const webhooks = current.discord.webhooks.filter((w) => w.id !== webhook.id)
+                    const defaultId =
+                      current.discord.defaultId === webhook.id
+                        ? webhooks[0]?.id
+                        : current.discord.defaultId
+                    return {
+                      discord: { webhooks, ...(defaultId ? { defaultId } : {}) },
+                    }
                   })
                 }
               >
@@ -356,5 +394,36 @@ function DiscordSection({
         </Button>
       </div>
     </Section>
+  )
+}
+
+/**
+ * A stored text setting. Uncontrolled inputs would keep showing the default
+ * that was there on first render — settings arrive from storage a tick later —
+ * and then write that stale default back on blur.
+ */
+function TextSetting({
+  value,
+  placeholder,
+  onCommit,
+}: {
+  value: string
+  placeholder?: string
+  onCommit: (value: string) => void
+}) {
+  const [draft, setDraft] = useState(value)
+  useEffect(() => setDraft(value), [value])
+
+  return (
+    <input
+      className={inputClass}
+      value={draft}
+      {...(placeholder ? { placeholder } : {})}
+      onChange={(event) => setDraft(event.target.value)}
+      onBlur={() => {
+        const next = draft.trim()
+        if (next !== value) onCommit(next)
+      }}
+    />
   )
 }

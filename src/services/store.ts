@@ -29,22 +29,24 @@ async function writeState(state: StoreState): Promise<void> {
   })
 }
 
-/**
- * Mutations are serialised. Read-modify-write against `storage.local` is not
- * atomic, so ticking ten checkboxes at once would otherwise have each write
- * clobber the one before it.
- */
-let pending: Promise<unknown> = Promise.resolve()
+const LOCK = 'vibecheck.store'
 
-function mutate(fn: (state: StoreState) => void | Promise<void>): Promise<StoreState> {
-  const next = pending.then(async () => {
+/**
+ * Read-modify-write against `storage.local` is not atomic, and the side panel,
+ * the injected overlay and the worker all write to the same key. An in-process
+ * promise chain would only order one of them, so the lock is a Web Lock: it is
+ * held across every extension context of this origin.
+ */
+async function mutate(fn: (state: StoreState) => void | Promise<void>): Promise<StoreState> {
+  let result: StoreState | undefined
+  await navigator.locks.request(LOCK, async () => {
     const state = await loadState()
     await fn(state)
     await writeState(state)
-    return state
+    result = state
   })
-  pending = next.catch(() => undefined)
-  return next
+  if (!result) throw new Error('The VibeCheck store lock was released without writing')
+  return result
 }
 
 function createSession(origin: string): Session {
@@ -64,24 +66,27 @@ function createSession(origin: string): Session {
  * origin starts a fresh one rather than mixing two reviews together.
  */
 export async function sessionForOrigin(origin: string): Promise<Session> {
-  const { sessions, activeSessionId } = await loadState()
-  const active = sessions.find((s) => s.id === activeSessionId)
-  if (active && active.origin === origin) return active
-
-  const existing = sessions.find((s) => s.origin === origin)
-  if (existing) {
-    await mutate((state) => {
-      state.activeSessionId = existing.id
-    })
-    return existing
-  }
-
-  const session = createSession(origin)
+  // The find and the create have to share one lock: two tabs capturing into a
+  // new origin at once would otherwise each create their own session.
+  let resolved: Session | undefined
   await mutate((state) => {
+    const active = state.sessions.find((s) => s.id === state.activeSessionId)
+    if (active?.origin === origin) {
+      resolved = active
+      return
+    }
+    const existing = state.sessions.find((s) => s.origin === origin)
+    if (existing) {
+      state.activeSessionId = existing.id
+      resolved = existing
+      return
+    }
+    const session = createSession(origin)
     state.sessions.unshift(session)
     state.activeSessionId = session.id
+    resolved = session
   })
-  return session
+  return resolved!
 }
 
 export async function startSession(origin: string): Promise<Session> {

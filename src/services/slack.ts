@@ -6,6 +6,19 @@ const API = 'https://slack.com/api'
  * message body in one post.
  */
 
+async function parse<T>(response: Response): Promise<{ ok: boolean; error?: string } & T> {
+  if (!response.ok && response.status !== 200) {
+    // A proxy or captive portal returns HTML, and `json()` would then throw a
+    // SyntaxError that says nothing about what actually happened.
+    throw new Error(`Slack returned ${response.status} ${response.statusText}`)
+  }
+  try {
+    return (await response.json()) as { ok: boolean; error?: string } & T
+  } catch {
+    throw new Error('Slack returned a response that was not JSON')
+  }
+}
+
 async function call<T>(token: string, method: string, body?: unknown): Promise<T> {
   const response = await fetch(`${API}/${method}`, {
     method: body ? 'POST' : 'GET',
@@ -15,7 +28,7 @@ async function call<T>(token: string, method: string, body?: unknown): Promise<T
     },
     ...(body ? { body: JSON.stringify(body) } : {}),
   })
-  const data = (await response.json()) as { ok: boolean; error?: string } & T
+  const data = await parse<T>(response)
   if (!data.ok) throw new Error(`Slack: ${data.error ?? response.statusText}`)
   return data
 }
@@ -37,19 +50,35 @@ export interface SlackChannel {
 }
 
 export async function listChannels(token: string): Promise<SlackChannel[]> {
-  const response = await fetch(
-    `${API}/conversations.list?limit=1000&exclude_archived=true&types=public_channel,private_channel`,
-    { headers: { Authorization: `Bearer ${token}` } },
-  )
-  const data = (await response.json()) as {
-    ok: boolean
-    error?: string
-    channels?: { id: string; name: string; is_private: boolean }[]
+  const channels: SlackChannel[] = []
+  let cursor = ''
+
+  // Slack pages this endpoint regardless of `limit`, so a big workspace would
+  // silently show only part of its channels.
+  for (let page = 0; page < 20; page += 1) {
+    const params = new URLSearchParams({
+      limit: '200',
+      exclude_archived: 'true',
+      types: 'public_channel,private_channel',
+      ...(cursor ? { cursor } : {}),
+    })
+    const response = await fetch(`${API}/conversations.list?${params}`, {
+      headers: { Authorization: `Bearer ${token}` },
+    })
+    const data = await parse<{
+      channels?: { id: string; name: string; is_private: boolean }[]
+      response_metadata?: { next_cursor?: string }
+    }>(response)
+    if (!data.ok) throw new Error(`Slack: ${data.error ?? response.statusText}`)
+
+    for (const channel of data.channels ?? []) {
+      channels.push({ id: channel.id, name: channel.name, isPrivate: channel.is_private })
+    }
+    cursor = data.response_metadata?.next_cursor ?? ''
+    if (!cursor) break
   }
-  if (!data.ok) throw new Error(`Slack: ${data.error ?? response.statusText}`)
-  return (data.channels ?? [])
-    .map((c) => ({ id: c.id, name: c.name, isPrivate: c.is_private }))
-    .sort((a, b) => a.name.localeCompare(b.name))
+
+  return channels.sort((a, b) => a.name.localeCompare(b.name))
 }
 
 export interface SlackUpload {

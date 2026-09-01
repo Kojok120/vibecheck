@@ -45,8 +45,10 @@ try {
   await waitFor(() => page.evaluate(`document.title === 'Test app'`), { label: 'the fixture page' })
   check('fixture page loaded', true)
 
-  const shadow = (selector) =>
-    `document.getElementById('vibecheck-overlay-root')?.shadowRoot?.querySelector(${JSON.stringify(selector)})`
+  const mode = () =>
+    page.evaluate(
+      `document.getElementById('vibecheck-overlay-root')?.getAttribute('data-vibecheck-mode') ?? null`,
+    )
 
   const tabId = await worker.evaluate(`
     (async () => {
@@ -58,13 +60,21 @@ try {
   `)
   check('overlay injected on demand', typeof tabId === 'number', `tab ${tabId}`)
 
-  const hud = await waitFor(() => page.evaluate(`${shadow('.hud')}?.textContent ?? null`), {
-    label: 'the HUD',
-  })
-  check('HUD rendered in a shadow root', Boolean(hud), JSON.stringify(hud))
+  check(
+    'overlay reaches its idle state',
+    (await waitFor(async () => ((await mode()) === 'idle' ? 'idle' : null), {
+      label: 'the HUD',
+    })) === 'idle',
+  )
   check(
     'page styles are untouched',
     await page.evaluate(`getComputedStyle(document.body).margin === '0px'`),
+  )
+  check(
+    'the page cannot reach into the overlay',
+    await page.evaluate(
+      `document.getElementById('vibecheck-overlay-root').shadowRoot === null`,
+    ),
   )
 
   const key = async (text, code, keyCode) => {
@@ -93,7 +103,9 @@ try {
   await key('s', 'KeyS', 83)
   check(
     'S starts a selection',
-    await waitFor(() => page.evaluate(`!!${shadow('.layer.grabbing')}`), { label: 'selection mode' }),
+    (await waitFor(async () => ((await mode()) === 'selecting' ? 'selecting' : null), {
+      label: 'selection mode',
+    })) === 'selecting',
   )
 
   const box = await page.evaluate(`
@@ -106,10 +118,10 @@ try {
 
   check(
     'the drag captures and opens the form',
-    await waitFor(() => page.evaluate(`!!${shadow('.card')}`), {
+    (await waitFor(async () => ((await mode()) === 'composing' ? 'composing' : null), {
       label: 'the comment form',
       timeout: 15000,
-    }),
+    })) === 'composing',
   )
 
   const shot = await worker.evaluate(`
@@ -124,11 +136,18 @@ try {
       })
       const keys = await read((s) => s.getAllKeys())
       if (!keys.length) return null
-      const bitmap = await createImageBitmap(await read((s) => s.get(keys.at(-1))))
-      return { width: bitmap.width, height: bitmap.height }
+      const record = await read((s) => s.get(keys.at(-1)))
+      const blob = record instanceof Blob ? record : record.blob
+      const bitmap = await createImageBitmap(blob)
+      return { width: bitmap.width, height: bitmap.height, at: record.at ?? null }
     })()
   `)
   check('screenshot stored in IndexedDB', Boolean(shot), shot ? `${shot.width}×${shot.height}` : '')
+  check(
+    'the screenshot records when it was taken',
+    typeof shot?.at === 'number',
+    'so the collector can spare one whose comment is still being written',
+  )
   if (shot) {
     const dpr = await page.evaluate('window.devicePixelRatio')
     const expected = { w: Math.round((box.w + 12) * dpr), h: Math.round((box.h + 12) * dpr) }
@@ -139,17 +158,28 @@ try {
     )
   }
 
-  await page.evaluate(`
-    (() => {
-      const root = document.getElementById('vibecheck-overlay-root').shadowRoot
-      const [background, request] = root.querySelectorAll('.card textarea')
-      const set = (el, v) => { el.value = v; el.dispatchEvent(new Event('input', { bubbles: true })) }
-      set(background, '数値が3桁を超えると右端で見切れる')
-      set(request, '桁区切りを入れて右揃えにする')
-      root.querySelector('.card button.primary').click()
-      return true
-    })()
-  `)
+  // Real keystrokes: the overlay ignores synthetic events, and the form is no
+  // longer reachable from the page.
+  const type = (text) => page.send('Input.insertText', { text })
+  await type('数値が3桁を超えると右端で見切れる')
+  await key('Tab', 'Tab', 9)
+  await type('桁区切りを入れて右揃えにする')
+  await page.send('Input.dispatchKeyEvent', {
+    type: 'keyDown',
+    key: 'Enter',
+    code: 'Enter',
+    windowsVirtualKeyCode: 13,
+    nativeVirtualKeyCode: 13,
+    modifiers: 4, // Meta
+  })
+  await page.send('Input.dispatchKeyEvent', {
+    type: 'keyUp',
+    key: 'Enter',
+    code: 'Enter',
+    windowsVirtualKeyCode: 13,
+    nativeVirtualKeyCode: 13,
+    modifiers: 4,
+  })
 
   const session = await waitFor(
     async () => {
@@ -185,7 +215,9 @@ try {
   await key('Escape', 'Escape', 27)
   check(
     'Esc dismisses the overlay',
-    await waitFor(() => page.evaluate(`!${shadow('.hud')}`), { label: 'the overlay to close' }),
+    (await waitFor(async () => ((await mode()) === 'off' ? 'off' : null), {
+      label: 'the overlay to close',
+    })) === 'off',
   )
 
   // --- side panel ---------------------------------------------------------
@@ -263,7 +295,9 @@ try {
     })(),
   )
 
-  const files = await readdir(downloads)
+  // Under `Browser.setDownloadBehavior` Chrome flattens names to GUIDs, so the
+  // real `vibecheck/<session>/01-<slug>.png` layout is not what lands here.
+  const files = await readdir(downloads, { recursive: true })
   const markdownName = files.find((f) => f.endsWith('.md'))
   const markdown = markdownName ? await readFile(join(downloads, markdownName), 'utf8') : ''
   check('review.md written', Boolean(markdownName))

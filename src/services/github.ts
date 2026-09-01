@@ -124,11 +124,18 @@ function sleep(ms: number, signal?: AbortSignal): Promise<void> {
 
 // ---- REST --------------------------------------------------------------
 
-async function api<T>(
-  token: string,
-  path: string,
-  init: RequestInit = {},
-): Promise<T> {
+/** Carries the status code so callers can branch on it instead of on text. */
+export class GithubError extends Error {
+  constructor(
+    readonly status: number,
+    message: string,
+  ) {
+    super(message)
+    this.name = 'GithubError'
+  }
+}
+
+async function api<T>(token: string, path: string, init: RequestInit = {}): Promise<T> {
   const response = await fetch(`${API}${path}`, {
     ...init,
     headers: {
@@ -140,8 +147,9 @@ async function api<T>(
     },
   })
   if (!response.ok) {
-    const detail = await response.json().catch(() => null)
-    throw new Error(
+    const detail = (await response.json().catch(() => null)) as { message?: string } | null
+    throw new GithubError(
+      response.status,
       `GitHub ${response.status}: ${detail?.message ?? response.statusText}`.trim(),
     )
   }
@@ -176,14 +184,6 @@ export async function getRepo(token: string, ref: RepoRef): Promise<RepoInfo> {
   }
 }
 
-export async function listRepos(token: string): Promise<string[]> {
-  const data = await api<{ full_name: string }[]>(
-    token,
-    '/user/repos?per_page=100&sort=pushed&affiliation=owner,collaborator,organization_member',
-  )
-  return data.map((repo) => repo.full_name)
-}
-
 /** Create the asset branch off the default branch the first time it is needed. */
 export async function ensureAssetBranch(
   token: string,
@@ -194,8 +194,10 @@ export async function ensureAssetBranch(
   try {
     await api(token, `/repos/${ref.owner}/${ref.repo}/git/ref/heads/${branch}`)
     return
-  } catch {
-    // Not there yet — fall through and create it.
+  } catch (error) {
+    // Only a genuine "no such ref" means we should create one; an auth or
+    // network failure must not be mistaken for a missing branch.
+    if (!(error instanceof GithubError) || error.status !== 404) throw error
   }
 
   const base = await api<{ object: { sha: string } }>(
@@ -209,7 +211,7 @@ export async function ensureAssetBranch(
     })
   } catch (error) {
     // A parallel upload may have won the race; anything else is real.
-    if (!String(error).includes('422')) throw error
+    if (!(error instanceof GithubError) || error.status !== 422) throw error
   }
 }
 
@@ -228,10 +230,26 @@ export async function uploadAsset(
   blob: Blob,
   message: string,
 ): Promise<AssetUrls> {
-  await api(token, `/repos/${ref.owner}/${ref.repo}/contents/${encodePath(path)}`, {
-    method: 'PUT',
-    body: JSON.stringify({ message, content: await blobToBase64(blob), branch }),
-  })
+  const endpoint = `/repos/${ref.owner}/${ref.repo}/contents/${encodePath(path)}`
+  const content = await blobToBase64(blob)
+
+  try {
+    await api(token, endpoint, {
+      method: 'PUT',
+      body: JSON.stringify({ message, content, branch }),
+    })
+  } catch (error) {
+    // Updating an existing file requires its blob sha. Re-sending an item the
+    // reviewer reopened lands on the same path, so this is the normal path on
+    // a second attempt, not an edge case.
+    if (!(error instanceof GithubError) || error.status !== 422) throw error
+    const existing = await api<{ sha: string }>(token, `${endpoint}?ref=${encodeURIComponent(branch)}`)
+    await api(token, endpoint, {
+      method: 'PUT',
+      body: JSON.stringify({ message, content, branch, sha: existing.sha }),
+    })
+  }
+
   return {
     rawUrl: `https://raw.githubusercontent.com/${ref.owner}/${ref.repo}/${branch}/${encodePath(path)}`,
     blobUrl: `https://github.com/${ref.owner}/${ref.repo}/blob/${branch}/${encodePath(path)}`,

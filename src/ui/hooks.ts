@@ -100,7 +100,11 @@ export function useStatus() {
       try {
         const done = await task()
         setStatus(done ? { text: done, tone: 'success' } : null)
-        if (done) window.setTimeout(() => setStatus(null), 4000)
+        // Only clear the message this run put up: a later error must not be
+        // swept away by an earlier success's timer.
+        if (done) {
+          window.setTimeout(() => setStatus((s) => (s?.text === done ? null : s)), 4000)
+        }
       } catch (error) {
         setStatus({
           text: error instanceof Error ? error.message : String(error),

@@ -54,11 +54,17 @@ export async function copyPlainText(items: NumberedItem[], locale: Locale): Prom
  * disk first, so this writes the bundle and then copies the text that points
  * at it.
  */
+export interface MarkdownCopy {
+  bundle: SavedBundle
+  /** Items whose screenshot could not be located on disk, so it has no link. */
+  missing: number
+}
+
 export async function copyMarkdownWithFiles(
   session: Session,
   items: NumberedItem[],
   locale: Locale,
-): Promise<SavedBundle> {
+): Promise<MarkdownCopy> {
   const bundle = await save(session, items, locale)
   const paths = Object.fromEntries(
     bundle.files.flatMap((file) =>
@@ -68,7 +74,8 @@ export async function copyMarkdownWithFiles(
   await copyText(
     renderMarkdown(items, { locale, images: { kind: 'path', paths }, headings: true }),
   )
-  return bundle
+  const expected = items.filter(({ item }) => item.shotKey).length
+  return { bundle, missing: expected - Object.keys(paths).length }
 }
 
 export async function save(

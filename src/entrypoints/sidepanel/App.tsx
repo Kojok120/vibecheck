@@ -6,6 +6,7 @@ import { useLocale, useSettings, useShortcut, useStatus, useStore } from '@/ui/h
 import { panelStrings } from '@/ui/strings'
 import { copyText } from '@/services/clipboard'
 import { listChannels } from '@/services/slack'
+import { isPanelNotice } from '@/services/messages'
 import { saveSettings } from '@/services/settings'
 import {
   markDone,
@@ -33,6 +34,18 @@ export function App() {
   const shortcut = useShortcut()
   const { status, busy, run, report, dismiss } = useStatus()
   const [picker, setPicker] = useState<PickerKind | null>(null)
+
+  // The worker cannot inject into chrome:// or the Web Store; without this the
+  // reviewer just sees a panel that never fills up.
+  useEffect(() => {
+    const listener = (message: unknown) => {
+      if (isPanelNotice(message) && message.kind === 'inject-failed') {
+        report(t.injectFailed, 'error')
+      }
+    }
+    browser.runtime.onMessage.addListener(listener)
+    return () => browser.runtime.onMessage.removeListener(listener)
+  }, [report, t])
 
   const items = active?.items ?? []
   // Handled items drop out of the open list, so the numbers the reviewer sees
@@ -102,9 +115,12 @@ export function App() {
         await resolve(batch, 'copy')
         return t.copiedText
       }
-      const bundle = await exporters.copyMarkdownWithFiles(active, batch, locale)
+      const { bundle, missing } = await exporters.copyMarkdownWithFiles(active, batch, locale)
       await resolve(batch, 'copy', bundle.folder)
-      return t.savedTo(bundle.folder)
+      // A missing path means the Markdown silently lost an image link, which
+      // is exactly what this mode exists to provide.
+      if (missing > 0) report(`${t.savedTo(bundle.folder)} — ${t.missingPaths}`, 'error')
+      return missing > 0 ? undefined : t.savedTo(bundle.folder)
     })
   }
 
@@ -191,6 +207,7 @@ export function App() {
         <Logo />
         <select
           value={active?.id ?? ''}
+          aria-label={t.sessions}
           onChange={(event) => void setActiveSession(event.target.value)}
           className="min-w-0 flex-1 truncate rounded-md bg-transparent px-1 py-1 text-[12px] font-semibold outline-none hover:bg-ink-200/60 dark:hover:bg-ink-800"
         >
@@ -276,7 +293,10 @@ export function App() {
 
           {active && (
             <p className="pt-2 text-center">
-              <Button variant="ghost" onClick={() => void removeSession(active.id)}>
+              <Button
+                variant="ghost"
+                onClick={() => confirm(t.deleteSessionConfirm) && void removeSession(active.id)}
+              >
                 {t.deleteSession}
               </Button>
             </p>

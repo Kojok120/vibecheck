@@ -23,6 +23,10 @@ const EN = {
   copyCode: 'Copy code',
   openGithub: 'Open GitHub',
   waiting: 'Waiting for approval…',
+  cancel: 'Cancel',
+  cleared: 'Deleted',
+  clearBlocked: 'Close the VibeCheck side panel and try again.',
+  badWebhookUrl: 'That does not look like a Discord webhook URL.',
   clientId: 'OAuth app client ID',
   clientIdHint:
     'Create an OAuth app with "Enable Device Flow" ticked and paste its client ID here. See the setup guide below.',
@@ -73,6 +77,10 @@ const JA: OptionsStrings = {
   copyCode: 'コードをコピー',
   openGithub: 'GitHub を開く',
   waiting: '承認を待っています…',
+  cancel: 'キャンセル',
+  cleared: '削除しました',
+  clearBlocked: 'VibeCheck のサイドパネルを閉じてから、もう一度お試しください。',
+  badWebhookUrl: 'Discord の Webhook URL の形式ではありません。',
   clientId: 'OAuth App の Client ID',
   clientIdHint:
     '「Enable Device Flow」にチェックを入れた OAuth App を作成し、その Client ID を貼り付けてください。手順は下のセットアップガイドにあります。',

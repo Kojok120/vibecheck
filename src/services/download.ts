@@ -43,14 +43,41 @@ async function saveBlob(blob: Blob, filename: string): Promise<string | undefine
   }
 }
 
-async function resolvePath(id: number, attempts = 60): Promise<string | undefined> {
-  for (let i = 0; i < attempts; i += 1) {
-    const [item] = await browser.downloads.search({ id })
-    if (item?.state === 'complete' && item.filename) return item.filename
-    if (item?.state === 'interrupted') return undefined
-    await new Promise((resolve) => setTimeout(resolve, 75))
-  }
-  return undefined
+/**
+ * Wait for Chrome to finish writing and report the path it chose.
+ *
+ * Polling alone timed out on slow disks and whenever "ask where to save each
+ * file" is on, and the absolute path is the whole point of the export — so
+ * this listens for the state change and only falls back to polling.
+ */
+function resolvePath(id: number, timeout = 120_000): Promise<string | undefined> {
+  return new Promise((resolve) => {
+    let settled = false
+    const finish = (value: string | undefined) => {
+      if (settled) return
+      settled = true
+      browser.downloads.onChanged.removeListener(onChanged)
+      clearTimeout(timer)
+      resolve(value)
+    }
+
+    function onChanged(delta: { id: number; state?: { current?: string } }): void {
+      if (delta.id !== id) return
+      if (delta.state?.current === 'interrupted') finish(undefined)
+      if (delta.state?.current === 'complete') void check()
+    }
+
+    async function check(): Promise<void> {
+      const [item] = await browser.downloads.search({ id })
+      if (item?.state === 'complete' && item.filename) finish(item.filename)
+      else if (item?.state === 'interrupted') finish(undefined)
+    }
+
+    const timer = setTimeout(() => finish(undefined), timeout)
+    browser.downloads.onChanged.addListener(onChanged)
+    // It may already be done before the listener was attached.
+    void check()
+  })
 }
 
 export interface SaveBundleInput {

@@ -86,6 +86,17 @@ export class Session {
   }
 }
 
+function freePort() {
+  return new Promise((resolve, reject) => {
+    const probe = createServer()
+    probe.on('error', reject)
+    probe.listen(0, '127.0.0.1', () => {
+      const { port } = probe.address()
+      probe.close(() => resolve(port))
+    })
+  })
+}
+
 function serve(root) {
   const types = { '.html': 'text/html', '.css': 'text/css', '.js': 'text/javascript' }
   const server = createServer(async (req, res) => {
@@ -119,18 +130,12 @@ async function stageExtension(source, dir) {
 }
 
 async function findChrome() {
+  const { statSync } = await import('node:fs')
   for (const candidate of CHROME_CANDIDATES) {
     try {
-      await readFile(candidate)
-      return candidate
+      if (statSync(candidate).isFile()) return candidate
     } catch {
-      // Not a readable file (or a directory); try the next one.
-      try {
-        const { statSync } = await import('node:fs')
-        if (statSync(candidate).isFile()) return candidate
-      } catch {
-        continue
-      }
+      // Not there; try the next one.
     }
   }
   throw new Error(
@@ -143,7 +148,8 @@ export async function launch({ extensionDir, fixtures, headless = true }) {
   const dir = await mkdtemp(join(tmpdir(), 'vibecheck-e2e-'))
   const ext = await stageExtension(extensionDir, dir)
   const { server, port } = await serve(fixtures)
-  const debugPort = 9200 + Math.floor(Math.random() * 500)
+  // Port 0 lets the OS choose; Chrome writes the real one to DevToolsActivePort.
+  const debugPort = await freePort()
 
   const child = spawn(
     chrome,
@@ -156,6 +162,8 @@ export async function launch({ extensionDir, fixtures, headless = true }) {
       `--remote-debugging-port=${debugPort}`,
       '--no-first-run',
       '--no-default-browser-check',
+      // The checks match on English UI strings.
+      '--lang=en-US',
       '--disable-background-timer-throttling',
       // CI containers often cannot set up the sandbox.
       ...(process.env.CI ? ['--no-sandbox'] : []),

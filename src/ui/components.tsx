@@ -83,9 +83,14 @@ function AutoTextarea({
 }) {
   const ref = useRef<HTMLTextAreaElement>(null)
   const [draft, setDraft] = useState(value)
+  const editing = useRef(false)
 
-  // Track external edits (another panel, or an undo) without stomping typing.
-  useEffect(() => setDraft(value), [value])
+  // Pick up edits made elsewhere, but never while this field has the caret:
+  // the storage round-trip after a commit echoes the value back, and that
+  // would otherwise overwrite whatever was typed in the meantime.
+  useEffect(() => {
+    if (!editing.current) setDraft(value)
+  }, [value])
 
   useEffect(() => {
     const el = ref.current
@@ -101,7 +106,13 @@ function AutoTextarea({
       value={draft}
       placeholder={placeholder}
       onChange={(event) => setDraft(event.target.value)}
-      onBlur={() => draft !== value && onCommit(draft)}
+      onFocus={() => {
+        editing.current = true
+      }}
+      onBlur={() => {
+        editing.current = false
+        if (draft !== value) onCommit(draft)
+      }}
       className="block w-full resize-none overflow-hidden rounded-lg border border-transparent bg-ink-100/70 px-2 py-1.5 text-[12.5px] leading-relaxed outline-none placeholder:text-ink-400 focus:border-brand-500 focus:bg-white dark:bg-ink-950/60 dark:placeholder:text-ink-600 dark:focus:bg-ink-950"
     />
   )

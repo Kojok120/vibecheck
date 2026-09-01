@@ -2,8 +2,16 @@ import { browser } from 'wxt/browser'
 import { defineBackground } from 'wxt/utils/define-background'
 import { captureRegion } from '@/services/capture'
 import { deleteShots } from '@/services/db'
-import { errorMessage, type BackgroundRequest, type Envelope } from '@/services/messages'
+import {
+  errorMessage,
+  type BackgroundRequest,
+  type Envelope,
+  type OverlayContext,
+  type PanelNotice,
+} from '@/services/messages'
 import { addItem, collectGarbage, loadState, newId, sessionForOrigin } from '@/services/store'
+import { loadSettings } from '@/services/settings'
+import { resolveLocale } from '@/core/i18n'
 import type { FeedbackItem } from '@/types'
 
 const COMMAND = 'toggle-vibecheck'
@@ -42,8 +50,11 @@ async function handle(
         checked: true,
       }
       await addItem(session.id, item)
+      // The number has to match what the panel shows, and the panel numbers
+      // only the items that are still outstanding.
       const { sessions } = await loadState()
-      const seq = sessions.find((s) => s.id === session.id)?.items.length ?? 1
+      const stored = sessions.find((s) => s.id === session.id)
+      const seq = stored?.items.filter((entry) => !entry.done).length ?? 1
       return { seq }
     }
 
@@ -52,7 +63,25 @@ async function handle(
       if (tabId !== undefined) openPanel(tabId)
       return null
     }
+
+    case 'overlay-context': {
+      const [settings, { sessions, activeSessionId }] = await Promise.all([
+        loadSettings(),
+        loadState(),
+      ])
+      const active = sessions.find((s) => s.id === activeSessionId)
+      const context: OverlayContext = {
+        locale: resolveLocale(settings.locale, browser.i18n.getUILanguage()),
+        openCount: active?.items.filter((item) => !item.done).length ?? 0,
+      }
+      return context
+    }
   }
+}
+
+function notifyPanel(notice: PanelNotice): void {
+  // Nothing is listening when the panel is closed, and that is fine.
+  void browser.runtime.sendMessage(notice).catch(() => undefined)
 }
 
 function originOf(url: string): string {
@@ -98,14 +127,19 @@ export default defineBackground(() => {
     const tabId = tab.id
     openPanel(tabId)
     void toggleOverlay(tabId).catch((error: unknown) => {
+      // chrome://, the Web Store and PDF views all refuse injection. The panel
+      // is already open, so say so there rather than only in a hidden console.
       console.warn('[VibeCheck] could not inject the overlay:', errorMessage(error))
+      notifyPanel({ type: 'panel-notice', kind: 'inject-failed' })
     })
   })
 
   browser.action.onClicked.addListener((tab) => {
     if (tab.id === undefined) return
     openPanel(tab.id)
-    void toggleOverlay(tab.id).catch(() => undefined)
+    void toggleOverlay(tab.id).catch(() => {
+      notifyPanel({ type: 'panel-notice', kind: 'inject-failed' })
+    })
   })
 
   browser.runtime.onInstalled.addListener((details) => {

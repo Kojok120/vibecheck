@@ -113,7 +113,7 @@ Incoming Webhook はファイルをアップロードできないため、Slack 
 | `storage`, `unlimitedStorage` | 指摘は `chrome.storage.local`、画像は拡張機能自身の IndexedDB に保存します |
 | `downloads` | 「保存」機能 |
 | `sidePanel`, `clipboardWrite` | サイドパネルと、合成画像のコピー |
-| `api.github.com` / `github.com` / `slack.com` / `discord.com` へのアクセス | 上記4サービスのみ。送信ボタンを押したときだけ通信します |
+| `api.github.com` / `github.com/login` / `slack.com` / `files.slack.com` / `discord.com` へのアクセス | 上記4サービスのみ。送信ボタンを押したときだけ通信します |
 
 送信ボタンを押すまで、データはどこにも送られません。トークンは端末内の `chrome.storage.local` に保存され、設定画面から削除できます。
 
