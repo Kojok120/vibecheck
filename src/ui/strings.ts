@@ -56,9 +56,9 @@ const EN = {
   chooseWebhook: 'Webhook',
   send: 'Send',
   cancel: 'Cancel',
-  privateRepoNotice:
-    'For a private repository, screenshots become links: the numbered image is copied afterwards so you can paste it into the issue.',
-  pasteAfterIssue: 'Numbered image copied — paste it into the issue.',
+  issueNotice:
+    'The issue text is created for you. The numbered image goes to your clipboard — paste it into the issue that opens.',
+  pasteAfterIssue: 'Issue created. The numbered image is on your clipboard — paste it in.',
 } as const
 
 export type PanelStrings = Widen<typeof EN>
@@ -120,9 +120,9 @@ const JA: PanelStrings = {
   chooseWebhook: 'Webhook',
   send: '送信',
   cancel: 'キャンセル',
-  privateRepoNotice:
-    'private リポジトリの場合、画像はリンクになります。作成後に合成画像をコピーするので、Issue に貼り付けてください。',
-  pasteAfterIssue: '合成画像をコピーしました。Issue に貼り付けてください。',
+  issueNotice:
+    'Issue の本文は自動で作成します。番号入り合成画像はクリップボードに入るので、開いた Issue に貼り付けてください。',
+  pasteAfterIssue: 'Issue を作成しました。合成画像をクリップボードに入れたので貼り付けてください。',
 }
 
 export const PANEL_STRINGS: Record<Locale, PanelStrings> = { en: EN, ja: JA }

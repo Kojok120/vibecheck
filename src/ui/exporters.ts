@@ -1,6 +1,6 @@
 import { buildIssue } from '@/core/issue'
 import { renderMarkdown, renderPlainText, renderSlackText } from '@/core/markdown'
-import { itemLabel, screenshotFileName, sessionFolderName } from '@/core/naming'
+import { itemLabel, screenshotFileName } from '@/core/naming'
 import { parseRepo, type RepoRef } from '@/core/repo'
 import { copyImage, copyText } from '@/services/clipboard'
 import { getShot } from '@/services/db'
@@ -93,51 +93,34 @@ export async function save(
 export interface IssueOutcome {
   number: number
   htmlUrl: string
-  /** True when the repo is private and the images could only be linked. */
-  imagesAreLinks: boolean
+  /** True when there are screenshots waiting on the clipboard to be pasted. */
+  hasScreenshots: boolean
 }
 
+/**
+ * Open one issue for the batch.
+ *
+ * The GitHub API cannot attach an image to an issue, and its image proxy
+ * cannot read a private repository's files — so rather than committing
+ * screenshots into the reviewer's repository, the numbered sheet goes onto the
+ * clipboard and the issue is opened for a single paste. That renders inline in
+ * public and private repositories alike, and leaves no branch behind.
+ */
 export async function createIssue(
   token: string,
   repoInput: string,
-  assetBranch: string,
-  session: Session,
   items: NumberedItem[],
   locale: Locale,
 ): Promise<IssueOutcome> {
   const ref = parseRepo(repoInput)
   if (!ref) throw new Error(`Not a repository: ${repoInput}`)
 
-  const repo = await github.getRepo(token, ref)
-  const shots = await loadShots(items)
-  const withShots = items.filter(({ item }) => item.shotKey && shots.has(item.shotKey))
-
-  const urls: Record<string, string> = {}
-  if (withShots.length > 0) {
-    await github.ensureAssetBranch(token, ref, assetBranch, repo.defaultBranch)
-    const folder = sessionFolderName(session)
-    for (const { item, seq } of withShots) {
-      const path = `assets/${folder}/${screenshotFileName(seq, item)}`
-      const uploaded = await github.uploadAsset(
-        token,
-        ref,
-        assetBranch,
-        path,
-        shots.get(item.shotKey!)!,
-        `chore(vibecheck): add screenshot for ${itemLabel(item, 50)}`,
-      )
-      // GitHub's image proxy cannot read a private repo's raw URLs, so a
-      // private repo gets a link that a signed-in reader can still open.
-      urls[item.id] = repo.isPrivate ? uploaded.blobUrl : uploaded.rawUrl
-    }
-  }
-
-  const draft = buildIssue(items, {
-    locale,
-    images: repo.isPrivate ? { kind: 'link', urls } : { kind: 'inline', urls },
-  })
+  const draft = buildIssue(items, { locale, images: { kind: 'none' } })
   const issue = await github.createIssue(token, ref, draft.title, draft.body)
-  return { ...issue, imagesAreLinks: repo.isPrivate && withShots.length > 0 }
+  const hasScreenshots = items.some(({ item }) => item.shotKey)
+
+  if (hasScreenshots) await copySheet(items, locale)
+  return { ...issue, hasScreenshots }
 }
 
 export function repoRefOf(input: string): RepoRef | null {

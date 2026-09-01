@@ -25,11 +25,11 @@ export default defineConfig({
       // Lets the side panel put a rendered contact sheet on the clipboard even
       // when sheet rendering outlives the click's transient activation.
       'clipboardWrite',
+      // One-click GitHub sign-in via launchWebAuthFlow.
+      'identity',
     ],
     host_permissions: [
       'https://api.github.com/*',
-      // Device flow only; nothing else on github.com is fetched.
-      'https://github.com/login/*',
       'https://slack.com/api/*',
       'https://files.slack.com/*',
       'https://discord.com/api/webhooks/*',

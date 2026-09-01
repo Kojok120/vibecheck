@@ -3,10 +3,8 @@ import { browser } from 'wxt/browser'
 import { copyText } from '@/services/clipboard'
 import * as github from '@/services/github'
 import {
-  DEFAULT_ASSET_BRANCH,
-  DEFAULT_GITHUB_CLIENT_ID,
-  isClientIdMissing,
-  saveSettings,
+  DEFAULT_AUTH_ENDPOINT,
+  isAuthEndpointMissing,
   updateSettings,
 } from '@/services/settings'
 import * as slack from '@/services/slack'
@@ -66,7 +64,7 @@ export function Options() {
         <select
           value={settings.locale}
           onChange={(event) =>
-            void saveSettings({ locale: event.target.value as Locale | 'auto' })
+            void updateSettings(() => ({ locale: event.target.value as Locale | 'auto' }))
           }
           className={inputClass}
         >
@@ -137,28 +135,21 @@ function GithubSection({
   settings: Settings
   onReport: Reporter
 }) {
-  const [device, setDevice] = useState<github.DeviceCode | null>(null)
   const [pending, setPending] = useState(false)
-  const abort = useRef<AbortController | null>(null)
+  const connected = Boolean(settings.github.token)
 
   const connect = async () => {
-    const clientId = settings.github.clientId || DEFAULT_GITHUB_CLIENT_ID
-    if (isClientIdMissing(clientId)) {
-      onReport(t.clientIdMissing, 'error')
+    const endpoint = settings.github.authEndpoint || DEFAULT_AUTH_ENDPOINT
+    if (isAuthEndpointMissing(endpoint)) {
+      onReport(t.authEndpointMissing, 'error')
       return
     }
     setPending(true)
-    const controller = new AbortController()
-    abort.current = controller
     try {
-      const code = await github.startDeviceFlow(clientId)
-      setDevice(code)
-      // Opened in the background: the reviewer needs to read the code first.
-      await browser.tabs.create({ url: code.verificationUri, active: false })
-      const token = await github.pollDeviceFlow(clientId, code, { signal: controller.signal })
+      const token = await github.connect(endpoint)
       const user = await github.getUser(token)
-      // Approval can take minutes; merge onto whatever is stored now so any
-      // edits made while waiting survive.
+      // Sign-in can take a while; merge onto whatever is stored now so any
+      // edits made in the meantime survive.
       await updateSettings((current) => ({
         github: { ...current.github, token, login: user.login },
       }))
@@ -166,13 +157,9 @@ function GithubSection({
     } catch (error) {
       onReport(error instanceof Error ? error.message : String(error), 'error')
     } finally {
-      abort.current = null
-      setDevice(null)
       setPending(false)
     }
   }
-
-  const connected = Boolean(settings.github.token)
 
   return (
     <Section
@@ -181,60 +168,32 @@ function GithubSection({
       aside={
         connected ? (
           <Button
-            onClick={() => {
-              const { token: _token, login: _login, ...rest } = settings.github
-              void saveSettings({ github: rest })
-            }}
+            onClick={() =>
+              void updateSettings((current) => {
+                const { token: _token, login: _login, ...rest } = current.github
+                return { github: rest }
+              })
+            }
           >
             {t.disconnect}
           </Button>
         ) : (
-          <Button
-            variant="primary"
-            disabled={pending || isClientIdMissing(settings.github.clientId)}
-            onClick={() => void connect()}
-          >
+          <Button variant="primary" disabled={pending} onClick={() => void connect()}>
             {pending ? <Spinner /> : null}
             {t.connect}
           </Button>
         )
       }
     >
-      {connected && settings.github.login && (
+      {connected && settings.github.login ? (
         <p className="text-[12.5px] font-semibold text-emerald-700 dark:text-emerald-400">
           {t.connectedAs(settings.github.login)}
         </p>
+      ) : (
+        <p className="text-[12.5px] leading-relaxed text-ink-500 dark:text-ink-400">
+          {t.githubConnectHint}
+        </p>
       )}
-
-      {device && (
-        <div className="rounded-xl bg-brand-50 p-4 dark:bg-ink-950">
-          <p className="text-[12.5px] text-ink-600 dark:text-ink-400">{t.deviceCodeHint}</p>
-          <p className="my-2 font-mono text-[26px] font-bold tracking-[0.2em]">{device.userCode}</p>
-          <div className="flex gap-2">
-            <Button onClick={() => void copyText(device.userCode)}>{t.copyCode}</Button>
-            <Button onClick={() => void browser.tabs.create({ url: device.verificationUri })}>
-              {t.openGithub}
-            </Button>
-            <Button variant="ghost" onClick={() => abort.current?.abort()}>
-              {t.cancel}
-            </Button>
-          </div>
-          <p className="mt-2 flex items-center gap-2 text-[12px] text-ink-500 dark:text-ink-400">
-            <Spinner /> {t.waiting}
-          </p>
-        </div>
-      )}
-
-      <Labelled label={t.assetBranch} hint={t.assetBranchHint}>
-        <TextSetting
-          value={settings.github.assetBranch}
-          onCommit={(assetBranch) =>
-            void updateSettings((current) => ({
-              github: { ...current.github, assetBranch: assetBranch || DEFAULT_ASSET_BRANCH },
-            }))
-          }
-        />
-      </Labelled>
 
       <Labelled label={t.defaultRepo}>
         <TextSetting
@@ -246,14 +205,26 @@ function GithubSection({
         />
       </Labelled>
 
-      <Labelled label={t.clientId} hint={t.clientIdHint}>
-        <TextSetting
-          value={settings.github.clientId}
-          onCommit={(clientId) =>
-            void updateSettings((current) => ({ github: { ...current.github, clientId } }))
-          }
-        />
-      </Labelled>
+      <details>
+        <summary className="cursor-pointer select-none text-[12px] text-ink-500 dark:text-ink-400">
+          {t.advanced}
+        </summary>
+        <div className="mt-2">
+          <Labelled label={t.authEndpoint} hint={t.authEndpointHint}>
+            <TextSetting
+              value={settings.github.authEndpoint}
+              onCommit={(authEndpoint) =>
+                void updateSettings((current) => ({
+                  github: {
+                    ...current.github,
+                    authEndpoint: authEndpoint || DEFAULT_AUTH_ENDPOINT,
+                  },
+                }))
+              }
+            />
+          </Labelled>
+        </div>
+      </details>
     </Section>
   )
 }

@@ -44,7 +44,7 @@ Every item asks for the same two things — **Background** (why it came up) and 
 | --- | --- |
 | **Copy** | One tall PNG with every screenshot stacked and **numbered**, so a single paste stays readable in Slack, Discord, GitHub or Notion |
 | **Save** | A folder of screenshots plus a `review.md` whose image links are absolute paths — paste it straight into Claude Code |
-| **GitHub** | One issue, screenshots committed to a dedicated branch and referenced from the body |
+| **GitHub** | One issue, written for you — the numbered image lands on your clipboard for a single paste |
 | **Slack** | The write-up and every screenshot as a single message |
 | **Discord** | Same, via a webhook |
 
@@ -77,20 +77,17 @@ Check `chrome://extensions/shortcuts` afterwards. On macOS `Cmd+J` is Chrome's o
 
 ## Setup
 
-Copy and Save need no configuration. The three destinations below each need one credential.
+Copy and Save work immediately, with nothing to configure.
+
+<a id="setup"></a>
 
 ### GitHub
 
-1. Create an OAuth app at **Settings → Developer settings → OAuth Apps → New OAuth App**. Any homepage and callback URL will do.
-2. **Tick "Enable Device Flow".** Without it, sign-in cannot complete.
-3. Copy the **Client ID** into VibeCheck's options page.
-4. Press **Connect**, enter the code GitHub shows you, and you are done.
+**Settings → Connect GitHub**, authorize, done. There is no client ID to fetch and no app to register.
 
-There is no client secret and no server: VibeCheck uses the OAuth device flow, which is the only grant a client-side app can finish on its own.
+Behind that button is one deliberate compromise. GitHub needs a client secret to turn an authorization code into a token, and an extension cannot hold a secret — so a [small worker](worker/) does that exchange. It stores nothing and logs nothing, and a token passes through it exactly once. If you would rather not trust it, [run your own copy](worker/README.md) and point **Advanced → Sign-in endpoint** at it.
 
-Screenshots are committed to a dedicated branch (`vibecheck-assets` by default) and referenced from the issue body, because the GitHub API has no endpoint for attaching an image to an issue.
-
-> **Private repositories:** GitHub's image proxy cannot read a private repository's raw URLs, so screenshots become links rather than inline images. VibeCheck copies the numbered image to your clipboard and opens the new issue, so one `Cmd+V` puts the pictures in.
+**About the screenshots.** VibeCheck writes the issue text and puts the numbered image on your clipboard, then opens the issue so you can paste it in. That one keystroke buys a lot: the GitHub API has no endpoint for attaching an image to an issue, and its image proxy cannot read a private repository's files. Committing screenshots into a branch — the usual workaround — leaves a branch behind in every repository you review and still does not render inline when the repository is private. Pasting does, and the picture never leaves your account.
 
 ### Slack
 
@@ -115,7 +112,8 @@ VibeCheck asks for as little as it can, and the reason for each is worth knowing
 | `storage`, `unlimitedStorage` | Feedback lives in `chrome.storage.local`; screenshots live in the extension's own IndexedDB. |
 | `downloads` | The Save action. |
 | `sidePanel`, `clipboardWrite` | The panel, and the numbered-image copy. |
-| Host access to `api.github.com`, `github.com/login`, `slack.com`, `files.slack.com`, `discord.com` | Only the four services above, only when you send something. |
+| `identity` | The one-click GitHub sign-in. |
+| Host access to `api.github.com`, `slack.com`, `files.slack.com`, `discord.com` | Only the three services above, only when you send something. |
 
 Nothing is uploaded anywhere until you press a send button. Tokens are stored in `chrome.storage.local` on your machine and can be revoked from the options page.
 

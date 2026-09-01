@@ -44,7 +44,7 @@ Cmd+J (Ctrl+J)   そのページでツールを起動
 | --- | --- |
 | **コピー** | 選んだスクショを縦に並べて**番号を焼き込んだ1枚の画像**。Slack / Discord / GitHub / Notion のどこでも1回の貼り付けで読める |
 | **保存** | スクショ一式と `review.md`（画像リンクは絶対パス）。Claude Code にそのまま渡せる |
-| **GitHub** | Issue を1本。スクショは専用ブランチにコミットして本文から参照 |
+| **GitHub** | Issue を1本、本文まで自動作成。番号入り画像はクリップボードに入るので1回貼るだけ |
 | **Slack** | 本文と全スクショを1メッセージで投稿 |
 | **Discord** | 同じことを Webhook 経由で |
 
@@ -75,20 +75,15 @@ pnpm build
 
 ## セットアップ
 
-コピーと保存は設定不要です。以下の3つは、それぞれ認証情報が1つずつ必要です。
+コピーと保存は設定なしですぐ使えます。
 
 ### GitHub
 
-1. **Settings → Developer settings → OAuth Apps → New OAuth App** で OAuth App を作成します。Homepage / Callback URL は任意で構いません。
-2. **「Enable Device Flow」に必ずチェックを入れます。** これがないとサインインが完了しません。
-3. **Client ID** を VibeCheck の設定画面に貼り付けます。
-4. 「接続する」を押し、GitHub 側に表示されるコードを入力すれば完了です。
+**設定 → GitHub と接続** を押して許可するだけです。Client ID を取ってくる必要も、OAuth App を作る必要もありません。
 
-クライアントシークレットもサーバーも使いません。ブラウザだけで完結できる唯一の方式である OAuth Device Flow を採用しています。
+このボタンの裏には割り切りが1つあります。GitHub は認可コードをトークンに交換する際にクライアントシークレットを要求し、拡張機能はシークレットを保持できません。そこで[小さな Worker](worker/) が交換だけを担っています。保存もログも行わず、トークンは一度通過するだけです。それでも信用したくない場合は[自分で同じものを動かし](worker/README.md)、**詳細設定 → サインイン用エンドポイント** を差し替えてください。
 
-スクリーンショットは専用ブランチ（既定 `vibecheck-assets`）にコミットし、Issue 本文から参照します。GitHub API には Issue に画像を添付する公式エンドポイントが存在しないためです。
-
-> **private リポジトリの場合:** GitHub の画像プロキシは private リポジトリの raw URL を取得できないため、スクショはインライン表示ではなくリンクになります。VibeCheck は Issue 作成後に合成画像をクリップボードへコピーし、その Issue を開くので、`Cmd+V` 一回で画像を貼り込めます。
+**スクリーンショットについて。** VibeCheck は Issue の本文を書き、番号入りの合成画像をクリップボードに入れて Issue を開きます。あとは貼り付けるだけです。この1操作には理由があります。GitHub API には Issue に画像を添付する公式エンドポイントがなく、画像プロキシは private リポジトリのファイルを読めません。よくある回避策であるブランチへのコミットは、レビューするリポジトリすべてにブランチを残したうえ、private では結局インライン表示されません。貼り付けなら表示され、画像はアカウントの外に出ません。
 
 ### Slack
 
@@ -113,7 +108,8 @@ Incoming Webhook はファイルをアップロードできないため、Slack 
 | `storage`, `unlimitedStorage` | 指摘は `chrome.storage.local`、画像は拡張機能自身の IndexedDB に保存します |
 | `downloads` | 「保存」機能 |
 | `sidePanel`, `clipboardWrite` | サイドパネルと、合成画像のコピー |
-| `api.github.com` / `github.com/login` / `slack.com` / `files.slack.com` / `discord.com` へのアクセス | 上記4サービスのみ。送信ボタンを押したときだけ通信します |
+| `identity` | GitHub のワンクリック接続 |
+| `api.github.com` / `slack.com` / `files.slack.com` / `discord.com` へのアクセス | 上記3サービスのみ。送信ボタンを押したときだけ通信します |
 
 送信ボタンを押すまで、データはどこにも送られません。トークンは端末内の `chrome.storage.local` に保存され、設定画面から削除できます。
 

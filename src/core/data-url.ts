@@ -26,14 +26,3 @@ export function dataUrlToBlob(dataUrl: string): Blob {
   const { bytes, mime } = dataUrlToBytes(dataUrl)
   return new Blob([bytes as unknown as BlobPart], { type: mime })
 }
-
-export async function blobToBase64(blob: Blob): Promise<string> {
-  const buffer = new Uint8Array(await blob.arrayBuffer())
-  let binary = ''
-  // Chunked to stay well under the argument limit for large screenshots.
-  const CHUNK = 0x8000
-  for (let i = 0; i < buffer.length; i += CHUNK) {
-    binary += String.fromCharCode(...buffer.subarray(i, i + CHUNK))
-  }
-  return btoa(binary)
-}

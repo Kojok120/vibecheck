@@ -159,8 +159,6 @@ export function App() {
         const outcome = await exporters.createIssue(
           settings.github.token!,
           value,
-          settings.github.assetBranch,
-          active,
           batch,
           locale,
         )
@@ -175,14 +173,9 @@ export function App() {
             ),
           },
         })
-        if (outcome.imagesAreLinks) {
-          // The API cannot attach images to a private repo's issue, so hand the
-          // reviewer a ready-to-paste sheet and open the issue for them.
-          await exporters.copySheet(batch, locale)
-          await browser.tabs.create({ url: outcome.htmlUrl })
-          return t.pasteAfterIssue
-        }
-        return t.issueCreated(outcome.number)
+        await browser.tabs.create({ url: outcome.htmlUrl })
+        // The sheet is already on the clipboard; one paste finishes the issue.
+        return outcome.hasScreenshots ? t.pasteAfterIssue : t.issueCreated(outcome.number)
       }
 
       if (kind === 'slack') {
@@ -327,7 +320,7 @@ export function App() {
             (repo): PickerOption => ({ value: repo, label: repo }),
           )}
           {...(settings.github.defaultRepo ? { initial: settings.github.defaultRepo } : {})}
-          note={t.privateRepoNotice}
+          note={t.issueNotice}
           onCancel={() => setPicker(null)}
           onConfirm={(value) => send('github', value)}
         />

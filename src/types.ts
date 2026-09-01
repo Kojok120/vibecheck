@@ -68,13 +68,15 @@ export interface Session {
 export type Locale = 'ja' | 'en'
 
 export interface GithubSettings {
-  /** Overrides the bundled OAuth client id (for forks and org installs). */
-  clientId: string
+  /**
+   * The hosted endpoint that completes the OAuth exchange. Only forks running
+   * their own worker need to change it.
+   */
+  authEndpoint: string
   token?: string
   login?: string
   /** "owner/repo" */
   defaultRepo?: string
-  assetBranch: string
   recentRepos: string[]
 }
 

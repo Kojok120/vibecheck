@@ -4,22 +4,19 @@ import type { Settings } from '@/types'
 const KEY = 'settings'
 
 /**
- * OAuth client ids are public by design; the device flow never uses a secret.
- * There is no shared app yet, so each install points at its own — see the
- * GitHub section of the README.
+ * Where the one-click GitHub sign-in is completed. The secret lives there, not
+ * here; the source is in `worker/`. A fork can point this at its own copy.
  */
-export const DEFAULT_GITHUB_CLIENT_ID = ''
+export const DEFAULT_AUTH_ENDPOINT = 'https://vibecheck-auth.kojokamo120.workers.dev'
 
-export function isClientIdMissing(clientId: string): boolean {
-  return clientId.trim().length === 0
+export function isAuthEndpointMissing(endpoint: string): boolean {
+  return endpoint.trim().length === 0
 }
-export const DEFAULT_ASSET_BRANCH = 'vibecheck-assets'
 
 export const DEFAULT_SETTINGS: Settings = {
   locale: 'auto',
   github: {
-    clientId: DEFAULT_GITHUB_CLIENT_ID,
-    assetBranch: DEFAULT_ASSET_BRANCH,
+    authEndpoint: DEFAULT_AUTH_ENDPOINT,
     recentRepos: [],
   },
   slack: {},

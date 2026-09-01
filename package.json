@@ -1,6 +1,6 @@
 {
   "name": "vibecheck",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "private": true,
   "type": "module",
   "description": "Capture UI feedback while you review, then ship it to GitHub Issues, Slack, or Discord.",

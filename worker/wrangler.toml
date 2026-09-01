@@ -1,0 +1,13 @@
+name = "vibecheck-auth"
+main = "src/index.ts"
+compatibility_date = "2026-09-01"
+
+# Set with `wrangler secret put`:
+#   GITHUB_CLIENT_SECRET
+#
+# Set here or with `wrangler secret put` (the id is not a secret):
+[vars]
+GITHUB_CLIENT_ID = ""
+# Chrome extension ids allowed to complete a sign-in, comma separated.
+# The unpacked development id and the Web Store id are usually both listed.
+ALLOWED_EXTENSION_IDS = ""
