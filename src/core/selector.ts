@@ -1,0 +1,105 @@
+/**
+ * Turn the element under a selection into a CSS selector an agent can grep for.
+ * Prefers stable hooks (id, test ids) and only falls back to structural paths.
+ */
+
+const TEST_ID_ATTRIBUTES = ['data-testid', 'data-test-id', 'data-test', 'data-qa', 'data-cy']
+const MAX_DEPTH = 6
+/** Framework-generated class names are noise, not a hook. */
+const GENERATED_CLASS = /^(?:[a-z]+[-_]?)?[A-Za-z0-9]*(?:__|--)?[a-z0-9]{5,}$|^(?:css|sc|jsx)-/
+
+function escapeIdent(value: string): string {
+  if (typeof CSS !== 'undefined' && typeof CSS.escape === 'function') return CSS.escape(value)
+  return value.replace(/([^\w-])/g, '\\$1')
+}
+
+function isUnique(root: Document | ShadowRoot, selector: string): boolean {
+  try {
+    return root.querySelectorAll(selector).length === 1
+  } catch {
+    return false
+  }
+}
+
+function testIdSelector(el: Element): string | null {
+  for (const attribute of TEST_ID_ATTRIBUTES) {
+    const value = el.getAttribute(attribute)
+    if (value) return `[${attribute}="${value.replace(/"/g, '\\"')}"]`
+  }
+  return null
+}
+
+function stableClass(el: Element): string | null {
+  const classes = Array.from(el.classList).filter(
+    (name) => name.length > 1 && name.length < 32 && !GENERATED_CLASS.test(name),
+  )
+  return classes[0] ? `.${escapeIdent(classes[0])}` : null
+}
+
+function nthOfType(el: Element): number {
+  let index = 1
+  let sibling = el.previousElementSibling
+  while (sibling) {
+    if (sibling.tagName === el.tagName) index += 1
+    sibling = sibling.previousElementSibling
+  }
+  return index
+}
+
+function segmentFor(el: Element): string {
+  const tag = el.tagName.toLowerCase()
+  const parent = el.parentElement
+  if (!parent) return tag
+
+  const cls = stableClass(el)
+  if (cls) {
+    const candidate = `${tag}${cls}`
+    const sameCount = Array.from(parent.children).filter((child) =>
+      child.matches(candidate),
+    ).length
+    if (sameCount === 1) return candidate
+  }
+
+  const sameTag = Array.from(parent.children).filter((c) => c.tagName === el.tagName)
+  return sameTag.length > 1 ? `${tag}:nth-of-type(${nthOfType(el)})` : tag
+}
+
+export function buildSelector(el: Element | null): string {
+  if (!el) return ''
+  const root = el.getRootNode() as Document | ShadowRoot
+
+  const parts: string[] = []
+  let current: Element | null = el
+
+  for (let depth = 0; current && depth < MAX_DEPTH; depth += 1) {
+    const id = current.getAttribute('id')
+    if (id && isUnique(root, `#${escapeIdent(id)}`)) {
+      parts.unshift(`#${escapeIdent(id)}`)
+      return parts.join(' > ')
+    }
+
+    const testId = testIdSelector(current)
+    if (testId && isUnique(root, testId)) {
+      parts.unshift(testId)
+      return parts.join(' > ')
+    }
+
+    parts.unshift(segmentFor(current))
+
+    const candidate = parts.join(' > ')
+    if (isUnique(root, candidate)) return candidate
+
+    const parent: Element | null = current.parentElement
+    if (!parent || parent.tagName === 'HTML') break
+    current = parent
+  }
+
+  return parts.join(' > ')
+}
+
+/** A short excerpt of the element's own text, for context in the report. */
+export function elementText(el: Element | null, maxLength = 120): string | undefined {
+  const text = el?.textContent?.replace(/\s+/g, ' ').trim()
+  if (!text) return undefined
+  return text.length > maxLength ? `${text.slice(0, maxLength - 1)}…` : text
+}

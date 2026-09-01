@@ -1,0 +1,41 @@
+{
+  "name": "vibecheck",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Capture UI feedback while you review, then ship it to GitHub Issues, Slack, or Discord.",
+  "license": "MIT",
+  "scripts": {
+    "dev": "wxt",
+    "build": "wxt build",
+    "zip": "wxt zip",
+    "compile": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "postinstall": "wxt prepare"
+  },
+  "dependencies": {
+    "react": "^19.2.0",
+    "react-dom": "^19.2.0"
+  },
+  "devDependencies": {
+    "@tailwindcss/vite": "^4.3.3",
+    "@types/chrome": "^0.2.7",
+    "@types/react": "^19.2.0",
+    "@types/react-dom": "^19.2.0",
+    "@wxt-dev/module-react": "^1.2.2",
+    "happy-dom": "^20.12.0",
+    "tailwindcss": "^4.3.3",
+    "typescript": "^5.9.0",
+    "vitest": "^4.1.11",
+    "wxt": "^0.21.4"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Kojok120/vibecheck.git"
+  },
+  "homepage": "https://github.com/Kojok120/vibecheck#readme",
+  "bugs": {
+    "url": "https://github.com/Kojok120/vibecheck/issues"
+  }
+}
