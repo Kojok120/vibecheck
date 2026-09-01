@@ -102,3 +102,23 @@ export function renderPlainText(items: FeedbackItem[], locale: Locale): string {
     })
     .join('\n\n')
 }
+
+/**
+ * Slack renders mrkdwn, not Markdown: `**bold**` and `###` headings come out
+ * as literal characters, so the same content needs its own dialect.
+ */
+export function renderSlackText(items: FeedbackItem[], locale: Locale): string {
+  const t = stringsFor(locale)
+  if (items.length === 0) return t.noItems
+
+  return items
+    .map((item, index) => {
+      const lines = [`*#${index + 1}  ${itemLabel(item)}*`]
+      if (item.background.trim()) lines.push(`*${t.background}*`, item.background.trim())
+      if (item.request.trim()) lines.push(`*${t.request}*`, item.request.trim())
+      lines.push(`<${item.page.url}|${item.page.url}>`)
+      if (item.target) lines.push(`\`${item.target.selector}\``)
+      return lines.join('\n')
+    })
+    .join('\n\n')
+}

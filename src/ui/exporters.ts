@@ -1,5 +1,5 @@
 import { buildIssue } from '@/core/issue'
-import { renderMarkdown, renderPlainText } from '@/core/markdown'
+import { renderMarkdown, renderPlainText, renderSlackText } from '@/core/markdown'
 import { itemLabel, screenshotFileName, sessionFolderName } from '@/core/naming'
 import { parseRepo, type RepoRef } from '@/core/repo'
 import { copyImage, copyText } from '@/services/clipboard'
@@ -167,11 +167,7 @@ export async function postToSlack(
     ]
   })
 
-  await slack.postFeedback(token, {
-    channelId,
-    text: renderMarkdown(items, { locale, images: { kind: 'none' }, headings: true }),
-    files,
-  })
+  await slack.postFeedback(token, { channelId, text: renderSlackText(items, locale), files })
 }
 
 export async function postToDiscord(

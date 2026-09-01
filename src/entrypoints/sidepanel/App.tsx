@@ -8,10 +8,12 @@ import { copyText } from '@/services/clipboard'
 import { listChannels } from '@/services/slack'
 import { saveSettings } from '@/services/settings'
 import {
+  markPosted,
   removeItems,
   removeSession,
   reorderItems,
   setActiveSession,
+  setChecked,
   startSession,
   updateItem,
 } from '@/services/store'
@@ -51,7 +53,11 @@ export function App() {
   const toggleAll = () => {
     if (!active) return
     const next = !items.every((item) => item.checked)
-    for (const item of items) void updateItem(active.id, item.id, { checked: next })
+    void setChecked(
+      active.id,
+      items.map((item) => item.id),
+      next,
+    )
   }
 
   const guard = (): FeedbackItem[] | null => {
@@ -118,11 +124,11 @@ export function App() {
           batch,
           locale,
         )
-        for (const item of batch) {
-          void updateItem(active.id, item.id, {
-            posted: { ...item.posted, github: outcome.htmlUrl },
-          })
-        }
+        await markPosted(
+          active.id,
+          batch.map((item) => item.id),
+          { github: outcome.htmlUrl },
+        )
         await saveSettings({
           github: {
             ...settings.github,
@@ -173,12 +179,11 @@ export function App() {
             </option>
           ))}
         </select>
-        <Button
-          variant="ghost"
-          onClick={() => void startSession(active?.origin ?? 'https://example.com')}
-        >
-          {t.newSession}
-        </Button>
+        {active && (
+          <Button variant="ghost" onClick={() => void startSession(active.origin)}>
+            {t.newSession}
+          </Button>
+        )}
         <Button variant="ghost" onClick={() => void browser.runtime.openOptionsPage()}>
           {t.settings}
         </Button>

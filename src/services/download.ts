@@ -43,7 +43,7 @@ async function saveBlob(blob: Blob, filename: string): Promise<string | undefine
   }
 }
 
-async function resolvePath(id: number, attempts = 40): Promise<string | undefined> {
+async function resolvePath(id: number, attempts = 60): Promise<string | undefined> {
   for (let i = 0; i < attempts; i += 1) {
     const [item] = await browser.downloads.search({ id })
     if (item?.state === 'complete' && item.filename) return item.filename

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { makeItem } from './fixtures'
-import { renderMarkdown, renderPlainText } from './markdown'
+import { renderMarkdown, renderPlainText, renderSlackText } from './markdown'
 
 const base = { locale: 'en' as const, images: { kind: 'none' as const } }
 
@@ -80,5 +80,33 @@ describe('renderPlainText', () => {
     expect(out).toContain('#1 Right-align and add thousands separators.')
     expect(out).toContain('#2 Right-align and add thousands separators.')
     expect(out).not.toContain('![')
+  })
+})
+
+describe('renderSlackText', () => {
+  it('uses mrkdwn bold, not Markdown bold', () => {
+    const out = renderSlackText([makeItem()], 'en')
+    expect(out).toContain('*Background*')
+    expect(out).not.toContain('**')
+  })
+
+  it('never emits Markdown headings, which Slack shows literally', () => {
+    expect(renderSlackText([makeItem()], 'en')).not.toContain('###')
+  })
+
+  it('wraps the URL in Slack link syntax', () => {
+    expect(renderSlackText([makeItem()], 'en')).toContain(
+      '<https://app.example.com/dashboard|https://app.example.com/dashboard>',
+    )
+  })
+
+  it('numbers items to match the contact sheet badges', () => {
+    const out = renderSlackText([makeItem({ id: 'a' }), makeItem({ id: 'b' })], 'en')
+    expect(out).toContain('*#1  ')
+    expect(out).toContain('*#2  ')
+  })
+
+  it('reports emptiness rather than posting a blank message', () => {
+    expect(renderSlackText([], 'ja')).toBe('指摘がありません')
   })
 })

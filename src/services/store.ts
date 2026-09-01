@@ -29,12 +29,22 @@ async function writeState(state: StoreState): Promise<void> {
   })
 }
 
-/** Re-read, mutate, write. Sessions are small, so a whole-object write is fine. */
-async function mutate(fn: (state: StoreState) => void | Promise<void>): Promise<StoreState> {
-  const state = await loadState()
-  await fn(state)
-  await writeState(state)
-  return state
+/**
+ * Mutations are serialised. Read-modify-write against `storage.local` is not
+ * atomic, so ticking ten checkboxes at once would otherwise have each write
+ * clobber the one before it.
+ */
+let pending: Promise<unknown> = Promise.resolve()
+
+function mutate(fn: (state: StoreState) => void | Promise<void>): Promise<StoreState> {
+  const next = pending.then(async () => {
+    const state = await loadState()
+    await fn(state)
+    await writeState(state)
+    return state
+  })
+  pending = next.catch(() => undefined)
+  return next
 }
 
 function createSession(origin: string): Session {
@@ -108,6 +118,39 @@ export async function updateItem(
     const index = session?.items.findIndex((i) => i.id === itemId) ?? -1
     if (!session || index < 0) return
     session.items[index] = { ...session.items[index]!, ...patch }
+    session.updatedAt = Date.now()
+  })
+}
+
+/** Tick or untick several items in one write. */
+export async function setChecked(
+  sessionId: string,
+  itemIds: string[],
+  checked: boolean,
+): Promise<void> {
+  const ids = new Set(itemIds)
+  await mutate((state) => {
+    const session = state.sessions.find((s) => s.id === sessionId)
+    if (!session) return
+    session.items = session.items.map((item) =>
+      ids.has(item.id) ? { ...item, checked } : item,
+    )
+  })
+}
+
+/** Record where a batch of items was published, in one write. */
+export async function markPosted(
+  sessionId: string,
+  itemIds: string[],
+  posted: Partial<FeedbackItem['posted']>,
+): Promise<void> {
+  const ids = new Set(itemIds)
+  await mutate((state) => {
+    const session = state.sessions.find((s) => s.id === sessionId)
+    if (!session) return
+    session.items = session.items.map((item) =>
+      ids.has(item.id) ? { ...item, posted: { ...item.posted, ...posted } } : item,
+    )
     session.updatedAt = Date.now()
   })
 }
