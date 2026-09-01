@@ -120,6 +120,7 @@ pnpm dev      # 監視ビルド。.output/chrome-mv3-dev を読み込む
 pnpm test     # 純粋関数の単体テスト
 pnpm compile  # 型チェック
 pnpm build    # 本番ビルド
+pnpm e2e      # 実際の Chrome を動かす通し確認 (e2e/README.md)
 ```
 
 構成:

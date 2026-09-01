@@ -122,6 +122,7 @@ pnpm dev      # watch build; load .output/chrome-mv3-dev as an unpacked extensio
 pnpm test     # unit tests for the pure logic
 pnpm compile  # type check
 pnpm build    # production build
+pnpm e2e      # drive a real Chrome end to end (see e2e/README.md)
 ```
 
 Layout:
