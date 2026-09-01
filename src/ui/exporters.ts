@@ -9,7 +9,7 @@ import * as github from '@/services/github'
 import { renderContactSheet, type SheetEntry } from '@/services/sheet'
 import * as slack from '@/services/slack'
 import { saveBundle, type SavedBundle } from '@/services/download'
-import type { FeedbackItem, Locale, NumberedItem, Session } from '@/types'
+import type { Locale, NumberedItem, Session } from '@/types'
 
 export async function loadShots(items: NumberedItem[]): Promise<Map<string, Blob>> {
   const shots = new Map<string, Blob>()

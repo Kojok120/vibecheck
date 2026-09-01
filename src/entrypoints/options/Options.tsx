@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { browser } from 'wxt/browser'
 import { copyText } from '@/services/clipboard'
 import * as github from '@/services/github'
