@@ -20,6 +20,17 @@ VibeCheck は、この繰り返しを「2つのキー」と「2つの入力欄�
 
 ## 使い方
 
+<table>
+<tr>
+<td width="52%"><img src="assets/screenshot-capture.png" alt="範囲を選んで記入"></td>
+<td width="48%"><img src="assets/screenshot-panel.png" alt="サイドパネルに溜まる指摘"></td>
+</tr>
+<tr>
+<td align="center"><sub>ドラッグして、どうせ書く2つを書くだけ</sub></td>
+<td align="center"><sub>指摘は右に溜まり、そのまま送れる</sub></td>
+</tr>
+</table>
+
 ```
 Cmd+J (Ctrl+J)   そのページでツールを起動
   S              ドラッグで範囲選択 → スクショ → 記入

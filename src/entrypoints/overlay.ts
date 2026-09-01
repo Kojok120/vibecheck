@@ -257,8 +257,8 @@ class Overlay {
   }
 
   private async captureAndCompose(rect: Rect): Promise<void> {
-    const target = describeTarget(rect)
     try {
+      const target = describeTarget(rect)
       const shot = await this.withHiddenChrome(() =>
         request({ type: 'capture', rect, dpr: window.devicePixelRatio }),
       )
@@ -471,8 +471,19 @@ function field(label: string, placeholder: string) {
   return { wrapper, input }
 }
 
-function nextFrame(): Promise<void> {
-  return new Promise((resolve) => requestAnimationFrame(() => resolve()))
+/**
+ * `requestAnimationFrame` never fires in a throttled, occluded or background
+ * tab. Waiting on it unguarded leaves the overlay hidden and the capture hung,
+ * so the frame wait is always time-bounded.
+ */
+function nextFrame(timeout = 60): Promise<void> {
+  return new Promise((resolve) => {
+    const timer = setTimeout(resolve, timeout)
+    requestAnimationFrame(() => {
+      clearTimeout(timer)
+      resolve()
+    })
+  })
 }
 
 function isEditable(el: HTMLElement): boolean {
@@ -495,14 +506,20 @@ function pageInfo(): PageInfo {
   }
 }
 
-/** Describe the element under the middle of the selection. */
+/**
+ * Describe the element under the middle of the selection.
+ *
+ * The overlay has to leave the layout entirely for the hit test: setting
+ * `pointer-events: none` on the host is not enough, because the selection
+ * layer inside it sets `pointer-events: auto` and would be hit instead.
+ */
 function describeTarget(rect: Rect): TargetInfo | undefined {
   const centre = centreOf(rect)
   const host = document.getElementById(HOST_ID)
-  const previous = host?.style.pointerEvents
-  if (host) host.style.pointerEvents = 'none'
+  const previous = host?.style.display
+  if (host) host.style.display = 'none'
   const element = document.elementFromPoint(centre.x, centre.y)
-  if (host) host.style.pointerEvents = previous ?? ''
+  if (host) host.style.display = previous ?? ''
   if (!element || element.id === HOST_ID) return undefined
 
   return {

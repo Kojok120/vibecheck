@@ -64,11 +64,21 @@ function segmentFor(el: Element): string {
   return sameTag.length > 1 ? `${tag}:nth-of-type(${nthOfType(el)})` : tag
 }
 
+/**
+ * Build a selector for `el`.
+ *
+ * An anchor — a unique id or test id on the element or a nearby ancestor —
+ * wins over a shorter structural path, because `#totals > div:nth-of-type(2)`
+ * tells a reader (or an agent reading the report) far more about where the
+ * element lives than a bare `div:nth-of-type(2)`, and survives edits better.
+ * Without an anchor, the shortest path that resolves uniquely is used.
+ */
 export function buildSelector(el: Element | null): string {
   if (!el) return ''
   const root = el.getRootNode() as Document | ShadowRoot
 
   const parts: string[] = []
+  let shortestUnique: string | undefined
   let current: Element | null = el
 
   for (let depth = 0; current && depth < MAX_DEPTH; depth += 1) {
@@ -85,16 +95,15 @@ export function buildSelector(el: Element | null): string {
     }
 
     parts.unshift(segmentFor(current))
-
     const candidate = parts.join(' > ')
-    if (isUnique(root, candidate)) return candidate
+    shortestUnique ??= isUnique(root, candidate) ? candidate : undefined
 
     const parent: Element | null = current.parentElement
     if (!parent || parent.tagName === 'HTML') break
     current = parent
   }
 
-  return parts.join(' > ')
+  return shortestUnique ?? parts.join(' > ')
 }
 
 /** A short excerpt of the element's own text, for context in the report. */

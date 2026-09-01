@@ -15,9 +15,16 @@ async function handle(
 ): Promise<unknown> {
   switch (message.type) {
     case 'capture': {
-      const windowId = sender.tab?.windowId
-      if (windowId === undefined) throw new Error('Capture must come from a tab')
-      return captureRegion(windowId, message.rect, message.dpr)
+      const tab = sender.tab
+      if (!tab?.id || tab.windowId === undefined) throw new Error('Capture must come from a tab')
+      // `captureVisibleTab` photographs whatever tab is in front, not the one
+      // that asked. Refusing beats silently attaching the wrong page as
+      // evidence for a piece of feedback.
+      const [front] = await browser.tabs.query({ active: true, windowId: tab.windowId })
+      if (front?.id !== tab.id) {
+        throw new Error('Bring this tab to the front before capturing')
+      }
+      return captureRegion(tab.windowId, message.rect, message.dpr)
     }
 
     case 'discard-shot': {

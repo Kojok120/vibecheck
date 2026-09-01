@@ -36,9 +36,21 @@ describe('buildSelector', () => {
     expect(document.querySelector(buildSelector(target))).toBe(target)
   })
 
-  it('stops at the shortest selector that is already unique', () => {
+  it('falls back to the shortest unique path when nothing anchors it', () => {
     mount('<main><div class="toolbar"><button>Save</button></div></main>')
     expect(buildSelector(find('button'))).toBe('button')
+  })
+
+  it('prefers an id anchor over a shorter but vaguer path', () => {
+    mount(`
+      <section id="totals">
+        <div><span>Revenue</span><span>1</span></div>
+        <div><span>Orders</span><span>2</span></div>
+      </section>`)
+    const target = document.querySelectorAll('#totals > div')[1]!
+    const selector = buildSelector(target)
+    expect(selector).toBe('#totals > div:nth-of-type(2)')
+    expect(document.querySelector(selector)).toBe(target)
   })
 
   it('disambiguates siblings with nth-of-type', () => {
@@ -50,7 +62,7 @@ describe('buildSelector', () => {
 
   it('uses a meaningful class when it is unique among siblings', () => {
     mount('<div id="card"><p class="lead">a</p><p>b</p></div>')
-    expect(buildSelector(find('.lead'))).toBe('p.lead')
+    expect(buildSelector(find('.lead'))).toBe('#card > p.lead')
   })
 
   it('ignores hashed framework class names', () => {

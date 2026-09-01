@@ -20,6 +20,17 @@ VibeCheck collapses that loop into two keystrokes and two fields.
 
 ## How it works
 
+<table>
+<tr>
+<td width="52%"><img src="assets/screenshot-capture.png" alt="Selecting a region and writing it up"></td>
+<td width="48%"><img src="assets/screenshot-panel.png" alt="The side panel collecting feedback"></td>
+</tr>
+<tr>
+<td align="center"><sub>Drag, then write the two things you were going to say anyway</sub></td>
+<td align="center"><sub>Findings stack up on the right, ready to send</sub></td>
+</tr>
+</table>
+
 ```
 Cmd+J (Ctrl+J)   start capturing on the current page
   S              drag a box → screenshot → write it up
