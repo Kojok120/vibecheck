@@ -136,6 +136,10 @@ src/entrypoints/ background worker・注入オーバーレイ・サイドパネ�
 
 アイコンは生成物です: `python3 scripts/make-icons.py`
 
+## プライバシー
+
+サーバーも解析もアカウントもありません。送信ボタンを押すまでデータは端末内に留まり、押したときも選んだ送り先にしか送られません。[全文](https://kojok120.github.io/vibecheck/privacy.html)。
+
 ## ライセンス
 
 MIT

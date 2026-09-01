@@ -140,6 +140,10 @@ Domain logic stays in `src/core` behind pure functions with tests; anything that
 
 Icons are generated: `python3 scripts/make-icons.py`.
 
+## Privacy
+
+No backend, no analytics, no accounts. Everything stays on your machine until you press a send button, and then it goes only to the destination you chose. [Full policy](https://kojok120.github.io/vibecheck/privacy.html).
+
 ## License
 
 MIT
