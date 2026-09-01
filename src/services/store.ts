@@ -1,5 +1,5 @@
 import { browser } from 'wxt/browser'
-import type { FeedbackItem, Session } from '@/types'
+import type { FeedbackItem, Resolution, Session } from '@/types'
 import { hostOf } from '@/core/naming'
 import { pruneShots } from './db'
 
@@ -138,19 +138,38 @@ export async function setChecked(
   })
 }
 
-/** Record where a batch of items was published, in one write. */
-export async function markPosted(
+/**
+ * Clear a batch off the open list once the reviewer has decided what to do
+ * with it. Unticking matters as much as marking: the next action should start
+ * from what is still outstanding.
+ */
+export async function markDone(
   sessionId: string,
   itemIds: string[],
-  posted: Partial<FeedbackItem['posted']>,
+  resolution: Resolution,
 ): Promise<void> {
   const ids = new Set(itemIds)
   await mutate((state) => {
     const session = state.sessions.find((s) => s.id === sessionId)
     if (!session) return
     session.items = session.items.map((item) =>
-      ids.has(item.id) ? { ...item, posted: { ...item.posted, ...posted } } : item,
+      ids.has(item.id) ? { ...item, done: resolution, checked: false } : item,
     )
+    session.updatedAt = Date.now()
+  })
+}
+
+/** Put items back on the open list, ticked so they are ready to send again. */
+export async function reopen(sessionId: string, itemIds: string[]): Promise<void> {
+  const ids = new Set(itemIds)
+  await mutate((state) => {
+    const session = state.sessions.find((s) => s.id === sessionId)
+    if (!session) return
+    session.items = session.items.map((item) => {
+      if (!ids.has(item.id)) return item
+      const { done: _done, ...rest } = item
+      return { ...rest, checked: true }
+    })
     session.updatedAt = Date.now()
   })
 }

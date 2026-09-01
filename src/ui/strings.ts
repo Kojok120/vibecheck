@@ -1,5 +1,5 @@
 import type { Widen } from '@/core/dict'
-import type { Locale } from '@/types'
+import type { Destination, Locale } from '@/types'
 
 const EN = {
   appName: 'VibeCheck',
@@ -26,6 +26,15 @@ const EN = {
   slack: 'Slack',
   discord: 'Discord',
   delete: 'Delete',
+  done: 'Done',
+  doneCount: (n: number) => `Done (${n})`,
+  reopen: 'Reopen',
+  allDone: 'Everything here is handled',
+  allDoneBody: 'Reopen an item below, or keep capturing on the page.',
+  via: (destination: Destination) =>
+    ({ copy: 'Copied', save: 'Saved', github: 'Issue', slack: 'Slack', discord: 'Discord' })[
+      destination
+    ],
   moveUp: 'Move up',
   moveDown: 'Move down',
   open: 'Open page',
@@ -78,6 +87,15 @@ const JA: PanelStrings = {
   slack: 'Slack',
   discord: 'Discord',
   delete: '削除',
+  done: '対応済み',
+  doneCount: (n: number) => `対応済み (${n})`,
+  reopen: '戻す',
+  allDone: 'すべて対応済みです',
+  allDoneBody: '下の一覧から戻すか、ページで指摘を追加してください。',
+  via: (destination: Destination) =>
+    ({ copy: 'コピー済み', save: '保存済み', github: 'Issue', slack: 'Slack', discord: 'Discord' })[
+      destination
+    ],
   moveUp: '上へ',
   moveDown: '下へ',
   open: 'ページを開く',

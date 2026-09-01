@@ -1,4 +1,4 @@
-import type { FeedbackItem, Locale } from '@/types'
+import type { FeedbackItem, Locale, NumberedItem } from '@/types'
 import { stringsFor } from './i18n'
 import { itemLabel } from './naming'
 
@@ -75,26 +75,26 @@ function renderItem(
 }
 
 /**
- * Render feedback items as Markdown. Sequence numbers come from array order and
- * match the badges burned into the contact sheet, so a reader can always pair
- * a picture with its text.
+ * Render feedback items as Markdown. Each item keeps the number it carries in
+ * the panel and in the contact sheet's badge, so a reader can always pair a
+ * picture with its text.
  */
-export function renderMarkdown(items: FeedbackItem[], options: MarkdownOptions): string {
+export function renderMarkdown(items: NumberedItem[], options: MarkdownOptions): string {
   const t = stringsFor(options.locale)
   if (items.length === 0) return t.noItems
 
-  const blocks = items.map((item, index) => renderItem(item, index + 1, options))
+  const blocks = items.map(({ item, seq }) => renderItem(item, seq, options))
   const body = blocks.join('\n\n---\n\n')
   return options.footer ? `${body}\n\n---\n\n_${t.generatedBy}_` : body
 }
 
 /** Plain text, no image references — for pasting into a chat as a quick note. */
-export function renderPlainText(items: FeedbackItem[], locale: Locale): string {
+export function renderPlainText(items: NumberedItem[], locale: Locale): string {
   const t = stringsFor(locale)
   if (items.length === 0) return t.noItems
   return items
-    .map((item, index) => {
-      const lines = [`#${index + 1} ${itemLabel(item)}`]
+    .map(({ item, seq }) => {
+      const lines = [`#${seq} ${itemLabel(item)}`]
       if (item.background.trim()) lines.push(`${t.background}: ${item.background.trim()}`)
       if (item.request.trim()) lines.push(`${t.request}: ${item.request.trim()}`)
       lines.push(`${t.page}: ${item.page.url}`)
@@ -107,13 +107,13 @@ export function renderPlainText(items: FeedbackItem[], locale: Locale): string {
  * Slack renders mrkdwn, not Markdown: `**bold**` and `###` headings come out
  * as literal characters, so the same content needs its own dialect.
  */
-export function renderSlackText(items: FeedbackItem[], locale: Locale): string {
+export function renderSlackText(items: NumberedItem[], locale: Locale): string {
   const t = stringsFor(locale)
   if (items.length === 0) return t.noItems
 
   return items
-    .map((item, index) => {
-      const lines = [`*#${index + 1}  ${itemLabel(item)}*`]
+    .map(({ item, seq }) => {
+      const lines = [`*#${seq}  ${itemLabel(item)}*`]
       if (item.background.trim()) lines.push(`*${t.background}*`, item.background.trim())
       if (item.request.trim()) lines.push(`*${t.request}*`, item.request.trim())
       lines.push(`<${item.page.url}|${item.page.url}>`)

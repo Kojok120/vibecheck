@@ -8,18 +8,19 @@ import { copyText } from '@/services/clipboard'
 import { listChannels } from '@/services/slack'
 import { saveSettings } from '@/services/settings'
 import {
-  markPosted,
+  markDone,
   removeItems,
   removeSession,
+  reopen,
   reorderItems,
   setActiveSession,
   setChecked,
   startSession,
   updateItem,
 } from '@/services/store'
-import type { FeedbackItem } from '@/types'
+import type { Destination, FeedbackItem, NumberedItem } from '@/types'
 import { ActionBar, type CopyMode } from './ActionBar'
-import { ItemRow } from './ItemRow'
+import { DoneRow, ItemRow } from './ItemRow'
 import { Picker, type PickerOption } from './Picker'
 
 type PickerKind = 'github' | 'slack' | 'discord'
@@ -34,7 +35,15 @@ export function App() {
   const [picker, setPicker] = useState<PickerKind | null>(null)
 
   const items = active?.items ?? []
-  const selected = useMemo(() => items.filter((item) => item.checked), [items])
+  // Handled items drop out of the open list, so the numbers the reviewer sees
+  // always describe what is still outstanding — and those are the numbers the
+  // exports use.
+  const open = useMemo<NumberedItem[]>(
+    () => items.filter((item) => !item.done).map((item, index) => ({ item, seq: index + 1 })),
+    [items],
+  )
+  const done = useMemo(() => items.filter((item) => item.done), [items])
+  const selected = useMemo(() => open.filter(({ item }) => item.checked), [open])
 
   const edit = (item: FeedbackItem, patch: Partial<FeedbackItem>) => {
     if (active) void updateItem(active.id, item.id, patch)
@@ -43,29 +52,40 @@ export function App() {
   const move = (item: FeedbackItem, delta: number) => {
     if (!active) return
     const order = items.map((i) => i.id)
+    const openIds = open.map((entry) => entry.item.id)
+    const target = openIds[openIds.indexOf(item.id) + delta]
+    if (!target) return
     const from = order.indexOf(item.id)
-    const to = from + delta
-    if (to < 0 || to >= order.length) return
-    order.splice(to, 0, ...order.splice(from, 1))
+    order.splice(order.indexOf(target), 0, ...order.splice(from, 1))
     void reorderItems(active.id, order)
   }
 
   const toggleAll = () => {
     if (!active) return
-    const next = !items.every((item) => item.checked)
+    const next = !open.every(({ item }) => item.checked)
     void setChecked(
       active.id,
-      items.map((item) => item.id),
+      open.map(({ item }) => item.id),
       next,
     )
   }
 
-  const guard = (): FeedbackItem[] | null => {
+  const guard = (): NumberedItem[] | null => {
     if (selected.length === 0) {
       report(t.nothingSelected, 'error')
       return null
     }
     return selected
+  }
+
+  /** Clearing handled items off the list is what keeps the panel a to-do list. */
+  const resolve = (batch: NumberedItem[], via: Destination, ref?: string) => {
+    if (!active) return
+    return markDone(
+      active.id,
+      batch.map(({ item }) => item.id),
+      { at: Date.now(), via, ...(ref ? { ref } : {}) },
+    )
   }
 
   const onCopy = (mode: CopyMode) => {
@@ -74,13 +94,16 @@ export function App() {
     void run(t.working, async () => {
       if (mode === 'sheet') {
         await exporters.copySheet(batch, locale)
+        await resolve(batch, 'copy')
         return t.copiedSheet
       }
       if (mode === 'text') {
         await exporters.copyPlainText(batch, locale)
+        await resolve(batch, 'copy')
         return t.copiedText
       }
       const bundle = await exporters.copyMarkdownWithFiles(active, batch, locale)
+      await resolve(batch, 'copy', bundle.folder)
       return t.savedTo(bundle.folder)
     })
   }
@@ -90,6 +113,7 @@ export function App() {
     if (!batch || !active) return
     void run(t.working, async () => {
       const bundle = await exporters.save(active, batch, locale)
+      await resolve(batch, 'save', bundle.folder)
       return t.savedTo(bundle.folder)
     })
   }
@@ -124,11 +148,7 @@ export function App() {
           batch,
           locale,
         )
-        await markPosted(
-          active.id,
-          batch.map((item) => item.id),
-          { github: outcome.htmlUrl },
-        )
+        await resolve(batch, 'github', outcome.htmlUrl)
         await saveSettings({
           github: {
             ...settings.github,
@@ -152,6 +172,7 @@ export function App() {
       if (kind === 'slack') {
         await exporters.postToSlack(settings.slack.token!, value, batch, locale)
         await saveSettings({ slack: { ...settings.slack, channelId: value } })
+        await resolve(batch, 'slack')
         return t.postedSlack
       }
 
@@ -159,6 +180,7 @@ export function App() {
       if (!webhook) throw new Error('Webhook not found')
       await exporters.postToDiscord(webhook.url, batch, locale)
       await saveSettings({ discord: { ...settings.discord, defaultId: value } })
+      await resolve(batch, 'discord')
       return t.postedDiscord
     })
   }
@@ -175,7 +197,7 @@ export function App() {
           {sessions.length === 0 && <option value="">{t.appName}</option>}
           {sessions.map((session) => (
             <option key={session.id} value={session.id}>
-              {session.title} · {session.items.length}
+              {session.title} · {session.items.filter((item) => !item.done).length}
             </option>
           ))}
         </select>
@@ -209,37 +231,65 @@ export function App() {
       {items.length === 0 ? (
         <Empty t={t} shortcut={shortcut} />
       ) : (
-        <ul className="flex-1 space-y-2 overflow-y-auto p-2.5">
-          {items.map((item, index) => (
-            <ItemRow
-              key={item.id}
-              item={item}
-              seq={index + 1}
-              t={t}
-              isFirst={index === 0}
-              isLast={index === items.length - 1}
-              onToggle={() => edit(item, { checked: !item.checked })}
-              onEdit={(patch) => edit(item, patch)}
-              onMove={(delta) => move(item, delta)}
-              onDelete={() => active && void removeItems(active.id, [item.id])}
-            />
-          ))}
+        <div className="flex-1 overflow-y-auto p-2.5">
+          {open.length === 0 ? (
+            <div className="px-4 py-8 text-center">
+              <p className="text-[13px] font-semibold">{t.allDone}</p>
+              <p className="mt-1 text-[12px] text-ink-500 dark:text-ink-400">{t.allDoneBody}</p>
+            </div>
+          ) : (
+            <ul className="space-y-2">
+              {open.map(({ item, seq }, index) => (
+                <ItemRow
+                  key={item.id}
+                  item={item}
+                  seq={seq}
+                  t={t}
+                  isFirst={index === 0}
+                  isLast={index === open.length - 1}
+                  onToggle={() => edit(item, { checked: !item.checked })}
+                  onEdit={(patch) => edit(item, patch)}
+                  onMove={(delta) => move(item, delta)}
+                  onDelete={() => active && void removeItems(active.id, [item.id])}
+                />
+              ))}
+            </ul>
+          )}
+
+          {done.length > 0 && active && (
+            <details className="mt-3 rounded-xl bg-ink-100/60 p-1.5 dark:bg-ink-900/60" open={open.length === 0}>
+              <summary className="cursor-pointer select-none px-1.5 py-1 text-[11.5px] font-semibold text-ink-500 dark:text-ink-400">
+                {t.doneCount(done.length)}
+              </summary>
+              <ul className="mt-1">
+                {done.map((item) => (
+                  <DoneRow
+                    key={item.id}
+                    item={item}
+                    t={t}
+                    onReopen={() => void reopen(active.id, [item.id])}
+                  />
+                ))}
+              </ul>
+            </details>
+          )}
+
           {active && (
-            <li className="pt-1 text-center">
+            <p className="pt-2 text-center">
               <Button variant="ghost" onClick={() => void removeSession(active.id)}>
                 {t.deleteSession}
               </Button>
-            </li>
+            </p>
           )}
-        </ul>
+        </div>
       )}
 
       <ActionBar
         t={t}
         count={selected.length}
-        total={items.length}
+        total={open.length}
         busy={busy}
-        allChecked={items.length > 0 && items.every((item) => item.checked)}
+        allChecked={open.length > 0 && open.every(({ item }) => item.checked)}
         onToggleAll={toggleAll}
         onCopy={onCopy}
         onSave={onSave}

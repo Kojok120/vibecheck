@@ -9,11 +9,11 @@ import * as github from '@/services/github'
 import { renderContactSheet, type SheetEntry } from '@/services/sheet'
 import * as slack from '@/services/slack'
 import { saveBundle, type SavedBundle } from '@/services/download'
-import type { FeedbackItem, Locale, Session } from '@/types'
+import type { FeedbackItem, Locale, NumberedItem, Session } from '@/types'
 
-export async function loadShots(items: FeedbackItem[]): Promise<Map<string, Blob>> {
+export async function loadShots(items: NumberedItem[]): Promise<Map<string, Blob>> {
   const shots = new Map<string, Blob>()
-  for (const item of items) {
+  for (const { item } of items) {
     if (!item.shotKey) continue
     const blob = await getShot(item.shotKey)
     if (blob) shots.set(item.shotKey, blob)
@@ -21,21 +21,17 @@ export async function loadShots(items: FeedbackItem[]): Promise<Map<string, Blob
   return shots
 }
 
-async function toEntries(items: FeedbackItem[], shots: Map<string, Blob>): Promise<SheetEntry[]> {
+async function toEntries(items: NumberedItem[], shots: Map<string, Blob>): Promise<SheetEntry[]> {
   const entries: SheetEntry[] = []
-  for (const [index, item] of items.entries()) {
+  for (const { item, seq } of items) {
     const blob = item.shotKey ? shots.get(item.shotKey) : undefined
-    entries.push({
-      item,
-      seq: index + 1,
-      ...(blob ? { image: await createImageBitmap(blob) } : {}),
-    })
+    entries.push({ item, seq, ...(blob ? { image: await createImageBitmap(blob) } : {}) })
   }
   return entries
 }
 
 /** One tall PNG carrying every selected item, each screenshot badged with its number. */
-export async function buildSheet(items: FeedbackItem[], locale: Locale): Promise<Blob> {
+export async function buildSheet(items: NumberedItem[], locale: Locale): Promise<Blob> {
   const shots = await loadShots(items)
   const entries = await toEntries(items, shots)
   try {
@@ -45,11 +41,11 @@ export async function buildSheet(items: FeedbackItem[], locale: Locale): Promise
   }
 }
 
-export async function copySheet(items: FeedbackItem[], locale: Locale): Promise<void> {
+export async function copySheet(items: NumberedItem[], locale: Locale): Promise<void> {
   await copyImage(await buildSheet(items, locale))
 }
 
-export async function copyPlainText(items: FeedbackItem[], locale: Locale): Promise<void> {
+export async function copyPlainText(items: NumberedItem[], locale: Locale): Promise<void> {
   await copyText(renderPlainText(items, locale))
 }
 
@@ -60,7 +56,7 @@ export async function copyPlainText(items: FeedbackItem[], locale: Locale): Prom
  */
 export async function copyMarkdownWithFiles(
   session: Session,
-  items: FeedbackItem[],
+  items: NumberedItem[],
   locale: Locale,
 ): Promise<SavedBundle> {
   const bundle = await save(session, items, locale)
@@ -77,7 +73,7 @@ export async function copyMarkdownWithFiles(
 
 export async function save(
   session: Session,
-  items: FeedbackItem[],
+  items: NumberedItem[],
   locale: Locale,
 ): Promise<SavedBundle> {
   const shots = await loadShots(items)
@@ -99,7 +95,7 @@ export async function createIssue(
   repoInput: string,
   assetBranch: string,
   session: Session,
-  items: FeedbackItem[],
+  items: NumberedItem[],
   locale: Locale,
 ): Promise<IssueOutcome> {
   const ref = parseRepo(repoInput)
@@ -107,14 +103,13 @@ export async function createIssue(
 
   const repo = await github.getRepo(token, ref)
   const shots = await loadShots(items)
-  const withShots = items.filter((item) => item.shotKey && shots.has(item.shotKey))
+  const withShots = items.filter(({ item }) => item.shotKey && shots.has(item.shotKey))
 
   const urls: Record<string, string> = {}
   if (withShots.length > 0) {
     await github.ensureAssetBranch(token, ref, assetBranch, repo.defaultBranch)
     const folder = sessionFolderName(session)
-    for (const item of withShots) {
-      const seq = items.indexOf(item) + 1
+    for (const { item, seq } of withShots) {
       const path = `assets/${folder}/${screenshotFileName(seq, item)}`
       const uploaded = await github.uploadAsset(
         token,
@@ -144,24 +139,20 @@ export function repoRefOf(input: string): RepoRef | null {
 
 // ---- Slack / Discord ---------------------------------------------------
 
-function uploadName(items: FeedbackItem[], item: FeedbackItem): string {
-  return screenshotFileName(items.indexOf(item) + 1, item)
-}
-
 export async function postToSlack(
   token: string,
   channelId: string,
-  items: FeedbackItem[],
+  items: NumberedItem[],
   locale: Locale,
 ): Promise<void> {
   const shots = await loadShots(items)
-  const files: slack.SlackUpload[] = items.flatMap((item) => {
+  const files: slack.SlackUpload[] = items.flatMap(({ item, seq }) => {
     const blob = item.shotKey ? shots.get(item.shotKey) : undefined
     if (!blob) return []
     return [
       {
-        name: uploadName(items, item),
-        title: `#${items.indexOf(item) + 1} ${itemLabel(item, 60)}`,
+        name: screenshotFileName(seq, item),
+        title: `#${seq} ${itemLabel(item, 60)}`,
         blob,
       },
     ]
@@ -172,13 +163,13 @@ export async function postToSlack(
 
 export async function postToDiscord(
   webhookUrl: string,
-  items: FeedbackItem[],
+  items: NumberedItem[],
   locale: Locale,
 ): Promise<void> {
   const shots = await loadShots(items)
-  const files: discord.DiscordUpload[] = items.flatMap((item) => {
+  const files: discord.DiscordUpload[] = items.flatMap(({ item, seq }) => {
     const blob = item.shotKey ? shots.get(item.shotKey) : undefined
-    return blob ? [{ name: uploadName(items, item), blob }] : []
+    return blob ? [{ name: screenshotFileName(seq, item), blob }] : []
   })
 
   // Discord caps a message at ten attachments; beyond that the contact sheet

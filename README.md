@@ -27,7 +27,7 @@ VibeCheck collapses that loop into two keystrokes and two fields.
 </tr>
 <tr>
 <td align="center"><sub>Drag, then write the two things you were going to say anyway</sub></td>
-<td align="center"><sub>Findings stack up on the right, ready to send</sub></td>
+<td align="center"><sub>Handled items check themselves off; the rest stay open</sub></td>
 </tr>
 </table>
 
@@ -47,6 +47,12 @@ Every item asks for the same two things — **Background** (why it came up) and 
 | **GitHub** | One issue, screenshots committed to a dedicated branch and referenced from the body |
 | **Slack** | The write-up and every screenshot as a single message |
 | **Discord** | Same, via a webhook |
+
+Once you send a batch anywhere — copy, save, issue, Slack, Discord — those
+items are checked off and fold into a **Done** section, so the list keeps
+showing only what is still outstanding. The numbers you see in the panel are
+the numbers that end up in the badge and in the text, and reopening an item
+puts it back at the top of the queue.
 
 ### About "copy several screenshots at once"
 

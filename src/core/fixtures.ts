@@ -1,4 +1,4 @@
-import type { FeedbackItem } from '@/types'
+import type { FeedbackItem, NumberedItem } from '@/types'
 
 /** Test/preview fixture builder. Keeps specs readable by defaulting everything. */
 export function makeItem(overrides: Partial<FeedbackItem> = {}): FeedbackItem {
@@ -28,4 +28,9 @@ export function makeItem(overrides: Partial<FeedbackItem> = {}): FeedbackItem {
     checked: true,
     ...overrides,
   }
+}
+
+/** Number a list of items the way the side panel does. */
+export function numbered(items: FeedbackItem[]): NumberedItem[] {
+  return items.map((item, index) => ({ item, seq: index + 1 }))
 }

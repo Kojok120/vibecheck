@@ -177,12 +177,12 @@ class Overlay {
     void this.syncCount()
   }
 
-  /** Show how many items the current session already holds. */
+  /** Show how many items are still outstanding in the current session. */
   private async syncCount(): Promise<void> {
     try {
       const { sessions, activeSessionId } = await loadState()
       const active = sessions.find((s) => s.id === activeSessionId)
-      this.setItemCount(active?.items.length ?? 0)
+      this.setItemCount(active?.items.filter((item) => !item.done).length ?? 0)
     } catch {
       /* the count is a nicety, never a blocker */
     }

@@ -1,4 +1,4 @@
-import type { FeedbackItem } from '@/types'
+import type { NumberedItem } from '@/types'
 import { stringsFor } from './i18n'
 import { renderMarkdown, type MarkdownOptions } from './markdown'
 import { hostOf, itemLabel } from './naming'
@@ -12,9 +12,9 @@ export interface IssueDraft {
  * One issue per batch. A single item gets its own request as the title; a batch
  * gets a title that says where the review happened and how big it is.
  */
-export function buildIssue(items: FeedbackItem[], options: MarkdownOptions): IssueDraft {
+export function buildIssue(items: NumberedItem[], options: MarkdownOptions): IssueDraft {
   const t = stringsFor(options.locale)
-  const first = items[0]
+  const first = items[0]?.item
 
   const title =
     items.length === 1 && first

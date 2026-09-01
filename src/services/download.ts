@@ -1,7 +1,7 @@
 import { browser } from 'wxt/browser'
 import { screenshotFileName, sessionFolderName } from '@/core/naming'
 import { renderMarkdown } from '@/core/markdown'
-import type { FeedbackItem, Locale, Session } from '@/types'
+import type { Locale, NumberedItem, Session } from '@/types'
 
 const ROOT = 'vibecheck'
 
@@ -55,7 +55,7 @@ async function resolvePath(id: number, attempts = 60): Promise<string | undefine
 
 export interface SaveBundleInput {
   session: Session
-  items: FeedbackItem[]
+  items: NumberedItem[]
   shots: Map<string, Blob>
   sheet?: Blob
   locale: Locale
@@ -76,10 +76,10 @@ export async function saveBundle(input: SaveBundleInput): Promise<SavedBundle> {
     files.push({ relative, ...(absolute ? { absolute } : {}) })
   }
 
-  for (const [index, item] of input.items.entries()) {
+  for (const { item, seq } of input.items) {
     const blob = item.shotKey ? input.shots.get(item.shotKey) : undefined
     if (!blob) continue
-    const relative = screenshotFileName(index + 1, item)
+    const relative = screenshotFileName(seq, item)
     const absolute = await saveBlob(blob, `${folder}/${relative}`)
     files.push({ itemId: item.id, relative, ...(absolute ? { absolute } : {}) })
     if (absolute) absolutePaths[item.id] = absolute

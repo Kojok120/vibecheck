@@ -223,6 +223,46 @@ try {
   const line = status.split('\n').find((l) => /Saved to|rror/.test(l)) ?? ''
   check('Save reports success', /Saved to vibecheck/.test(line), line)
 
+  // Handled items must leave the open list, or the panel stops being a to-do list.
+  const cleared = await waitFor(
+    async () => {
+      const sessions = JSON.parse(
+        await worker.evaluate(
+          `chrome.storage.local.get(['sessions']).then((r) => JSON.stringify(r.sessions ?? []))`,
+        ),
+      )
+      const saved = sessions[0]?.items?.at(-1)
+      return saved?.done ? saved : null
+    },
+    { label: 'the item to be marked done' },
+  )
+  check('Save clears the item off the open list', cleared.done.via === 'save', cleared.done.via)
+  check('a handled item is unticked', cleared.checked === false)
+  check(
+    'the panel folds it into the done section',
+    await waitFor(
+      () =>
+        page.evaluate(
+          `(() => { const s = document.querySelector('details summary')
+             return s && /Done \\(1\\)|対応済み \\(1\\)/.test(s.textContent) })()`,
+        ),
+      { label: 'the done section' },
+    ),
+  )
+  check(
+    'reopening puts it back',
+    await (async () => {
+      await page.evaluate(`
+        (() => { const d = document.querySelector('details'); d.open = true
+          const b = [...d.querySelectorAll('button')].find((x) => /Reopen|戻す/.test(x.textContent))
+          b.click(); return true })()
+      `)
+      return waitFor(() => page.evaluate(`document.querySelectorAll('li input[type=checkbox]').length > 0`), {
+        label: 'the item to come back',
+      })
+    })(),
+  )
+
   const files = await readdir(downloads)
   const markdownName = files.find((f) => f.endsWith('.md'))
   const markdown = markdownName ? await readFile(join(downloads, markdownName), 'utf8') : ''
